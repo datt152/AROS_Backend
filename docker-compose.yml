@@ -1,0 +1,16 @@
+services:
+  aros-db:
+    image: postgres:16-alpine
+    container_name: aros_db_container
+    restart: always
+    environment:
+      POSTGRES_DB: aros_db
+      POSTGRES_USER: omr_admin
+      POSTGRES_PASSWORD: omr_password123
+    ports:
+      - "5432:5432"
+    volumes:
+      - aros-db-data:/var/lib/postgresql/data
+
+volumes:
+  aros-db-data:
