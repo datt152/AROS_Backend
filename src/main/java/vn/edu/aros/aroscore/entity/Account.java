@@ -1,5 +1,6 @@
 package vn.edu.aros.aroscore.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -29,7 +30,8 @@ public class Account {
     private UserRole role = UserRole.STUDENT;
 
     // Khóa ngoại trỏ về User
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", referencedColumnName = "id", nullable = false)
+    @OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @JoinColumn(name = "user_id", referencedColumnName = "id", nullable = true)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private User user;
 }
