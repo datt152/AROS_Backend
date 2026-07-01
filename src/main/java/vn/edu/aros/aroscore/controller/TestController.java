@@ -3,7 +3,7 @@ package vn.edu.aros.aroscore.controller;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-import vn.edu.aros.aroscore.security.JwtUtils;
+import vn.edu.aros.aroscore.utils.JwtUtils;
 
 @RestController
 public class TestController {

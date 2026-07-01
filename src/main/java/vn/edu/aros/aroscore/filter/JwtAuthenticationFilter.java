@@ -1,4 +1,4 @@
-package vn.edu.aros.aroscore.security;
+package vn.edu.aros.aroscore.filter;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -12,6 +12,8 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
+import vn.edu.aros.aroscore.service.CustomUserDetailsService;
+import vn.edu.aros.aroscore.utils.JwtUtils;
 
 import java.io.IOException;
 

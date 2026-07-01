@@ -1,4 +1,4 @@
-package vn.edu.aros.aroscore.security;
+package vn.edu.aros.aroscore.dto;
 
 
 import lombok.AllArgsConstructor;
