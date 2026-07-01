@@ -23,11 +23,11 @@ public class CustomUserDetails implements UserDetails {
     // Build từ Account Entity
     public static CustomUserDetails build(Account account) {
         // Lấy Role từ bảng Account (Ví dụ: ROLE_STUDENT, ROLE_LECTURER)
-        GrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + account.getRole().name());
+        GrantedAuthority authority = new SimpleGrantedAuthority(account.getRole().name());
 
         return new CustomUserDetails(
                 account.getId(),
-                account.getUsername(),
+                account.getEmail(),
                 account.getPassword(),
                 Collections.singletonList(authority)
         );

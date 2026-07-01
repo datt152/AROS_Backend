@@ -17,10 +17,10 @@ public class CustomUserDetailsServiceImpl implements CustomUserDetailsService {
     private AccountRepository accountRepository;
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         // Tìm tài khoản trong Database
-        Account account = accountRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("Không tìm thấy tài khoản với username: " + username));
+        Account account = accountRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("Không tìm thấy tài khoản với username: " + email));
 
         // Trả về đối tượng mà Spring Security hiểu được
         return CustomUserDetails.build(account);

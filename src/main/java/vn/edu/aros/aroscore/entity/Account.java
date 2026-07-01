@@ -9,7 +9,9 @@ import lombok.Setter;
 import vn.edu.aros.aroscore.entity.enums.UserRole;
 
 @Entity
-@Table(name = "accounts")
+@Table(name = "accounts", uniqueConstraints = {
+        @UniqueConstraint(columnNames = "email") // Cực kỳ quan trọng
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -19,8 +21,8 @@ public class Account {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 50)
-    private String username;
+    @Column(nullable = false)
+    private String email;
 
     @Column(nullable = false)
     private String password;

@@ -25,7 +25,7 @@ public class TestController {
         boolean isValid = jwtUtils.validateJwtToken(token);
 
         // 4. Dịch ngược Token ra lại username
-        String extractedUsername = jwtUtils.getUsernameFromToken(token);
+        String extractedUsername = jwtUtils.getEmailFromToken(token);
 
         // Trả kết quả ra màn hình trình duyệt
         return "<h3>Kết quả test JWT:</h3>" +

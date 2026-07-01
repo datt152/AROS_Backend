@@ -37,10 +37,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (jwt != null && jwtUtils.validateJwtToken(jwt)) {
 
                 // Giải mã lấy username
-                String username = jwtUtils.getUsernameFromToken(jwt);
+                String email = jwtUtils.getEmailFromToken(jwt);
 
                 // Lấy thông tin chi tiết của user từ Database
-                UserDetails userDetails = customUserDetailsService.loadUserByUsername(username);
+                UserDetails userDetails = customUserDetailsService.loadUserByUsername(email);
 
                 // Báo cho Spring Security Jwt hợp lệ
                 UsernamePasswordAuthenticationToken authentication =

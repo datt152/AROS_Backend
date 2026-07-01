@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import vn.edu.aros.aroscore.dto.request.LoginRequest;
 import vn.edu.aros.aroscore.dto.request.SignUpRequest;
 import vn.edu.aros.aroscore.service.AuthService;
 
@@ -19,5 +20,9 @@ public class AuthController {
     public ResponseEntity<?> signup(@RequestBody SignUpRequest request) {
         authService.registerAccount(request);
         return ResponseEntity.ok("Đăng ký thành công!");
+    }
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        return ResponseEntity.ok(authService.authenticateUser(request));
     }
 }

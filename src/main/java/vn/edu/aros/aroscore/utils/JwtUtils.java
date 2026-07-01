@@ -28,8 +28,8 @@ public class JwtUtils {
                 .compact();
     }
 
-    // 2. Hàm lấy username từ Token
-    public String getUsernameFromToken(String token) {
+    // 2. Hàm lấy email từ Token
+    public String getEmailFromToken(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(key())
                 .build()

@@ -6,8 +6,8 @@ import vn.edu.aros.aroscore.entity.Account;
 import java.util.Optional;
 
 public interface AccountRepository extends JpaRepository<Account, Long> {
-    Optional<Account> findByUsername(String username);
+    Optional<Account> findByEmail(String email);
 
+    boolean existsByEmail(String email);
 
-    boolean existsByUsername(String username);
 }
