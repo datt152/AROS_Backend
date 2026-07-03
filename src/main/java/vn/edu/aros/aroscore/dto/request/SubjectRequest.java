@@ -9,6 +9,4 @@ public class SubjectRequest {
     private String subjectName;
 
     private String description;
-
-    private Long lecturerId;
 }

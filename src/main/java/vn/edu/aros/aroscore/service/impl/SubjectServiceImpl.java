@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.edu.aros.aroscore.dto.request.SubjectRequest;
@@ -28,21 +29,26 @@ public class SubjectServiceImpl implements SubjectService {
     @Autowired
     private SubjectMapper subjectMapper;
 
+    private String getCurrentUserEmail() {
+        return SecurityContextHolder.getContext().getAuthentication().getName();
+    }
+
     @Override
     @Transactional
     public SubjectResponse createSubject(SubjectRequest request) {
-        if (subjectRepository.existsBySubjectName(request.getSubjectName())) {
-            throw new RuntimeException("Tên môn học đã tồn tại!");
+        String email = getCurrentUserEmail();
+
+        // Check trùng tên môn học NHƯNG chỉ trong phạm vi của giáo viên này thôi
+        if (subjectRepository.existsBySubjectNameAndLecturerEmail(request.getSubjectName(), email)) {
+            throw new RuntimeException("Bạn đã có môn học với tên này rồi!");
         }
 
         Subject subject = subjectMapper.toEntity(request);
 
-        if (request.getLecturerId() != null) {
-            User lecturer = userRepository.findById(request.getLecturerId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy giảng viên với ID: " + request.getLecturerId()));
-            subject.setLecturer(lecturer);
-        }
-//        subject.setLecturer(null); // Set lecturer to null when creating a new subject
+        User lecturer = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin giảng viên!"));
+
+        subject.setLecturer(lecturer);
 
         Subject savedSubject = subjectRepository.save(subject);
         return subjectMapper.toResponse(savedSubject);
@@ -50,39 +56,40 @@ public class SubjectServiceImpl implements SubjectService {
 
     @Override
     public SubjectResponse getSubjectById(Long id) {
-        Subject subject = subjectRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy môn học với ID: " + id));
+        String email = getCurrentUserEmail();
+
+        // Đảm bảo chỉ lấy được môn học nếu môn đó do chính mình tạo
+        Subject subject = subjectRepository.findByIdAndLecturerEmail(id, email)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy môn học hoặc bạn không có quyền xem!"));
+
         return subjectMapper.toResponse(subject);
     }
 
     @Override
     public Page<SubjectResponse> getAllSubjects(int page, int size) {
+        String email = getCurrentUserEmail();
+
         Pageable pageable = PageRequest.of(page, size, Sort.by("subjectName").ascending());
 
-        return subjectRepository.findAll(pageable)
+        // Lọc danh sách môn học theo đúng giáo viên đang đăng nhập
+        return subjectRepository.findAllByLecturerEmail(email, pageable)
                 .map(subjectMapper::toResponse);
     }
 
     @Override
     @Transactional
     public SubjectResponse updateSubject(Long id, SubjectRequest request) {
-        Subject subject = subjectRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy môn học với ID: " + id));
+        String email = getCurrentUserEmail();
+
+        Subject subject = subjectRepository.findByIdAndLecturerEmail(id, email)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy môn học hoặc bạn không có quyền sửa!"));
 
         if (!subject.getSubjectName().equalsIgnoreCase(request.getSubjectName())
-                && subjectRepository.existsBySubjectName(request.getSubjectName())) {
-            throw new RuntimeException("Tên môn học mới đã tồn tại hệ thống!");
+                && subjectRepository.existsBySubjectNameAndLecturerEmail(request.getSubjectName(), email)) {
+            throw new RuntimeException("Tên môn học mới bị trùng với một môn khác của bạn!");
         }
 
         subjectMapper.updateEntityFromRequest(request, subject);
-
-        if (request.getLecturerId() != null) {
-            User lecturer = userRepository.findById(request.getLecturerId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy giảng viên với ID: " + request.getLecturerId()));
-            subject.setLecturer(lecturer);
-        } else {
-            subject.setLecturer(null);
-        }
 
         Subject updatedSubject = subjectRepository.save(subject);
         return subjectMapper.toResponse(updatedSubject);
@@ -91,9 +98,11 @@ public class SubjectServiceImpl implements SubjectService {
     @Override
     @Transactional
     public void deleteSubject(Long id) {
-        if (!subjectRepository.existsById(id)) {
-            throw new RuntimeException("Không tìm thấy môn học để xóa!");
-        }
-        subjectRepository.deleteById(id);
+        String email = getCurrentUserEmail();
+
+        Subject subject = subjectRepository.findByIdAndLecturerEmail(id, email)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy môn học hoặc bạn không có quyền xóa!"));
+
+        subjectRepository.delete(subject);
     }
 }
