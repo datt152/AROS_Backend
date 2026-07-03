@@ -37,12 +37,12 @@ public class SubjectServiceImpl implements SubjectService {
 
         Subject subject = subjectMapper.toEntity(request);
 
-//        if (request.getLecturerId() != null) {
-//            User lecturer = userRepository.findById(request.getLecturerId())
-//                    .orElseThrow(() -> new RuntimeException("Không tìm thấy giảng viên với ID: " + request.getLecturerId()));
-//            subject.setLecturer(lecturer);
-//        }
-        subject.setLecturer(null); // Set lecturer to null when creating a new subject
+        if (request.getLecturerId() != null) {
+            User lecturer = userRepository.findById(request.getLecturerId())
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy giảng viên với ID: " + request.getLecturerId()));
+            subject.setLecturer(lecturer);
+        }
+//        subject.setLecturer(null); // Set lecturer to null when creating a new subject
 
         Subject savedSubject = subjectRepository.save(subject);
         return subjectMapper.toResponse(savedSubject);
