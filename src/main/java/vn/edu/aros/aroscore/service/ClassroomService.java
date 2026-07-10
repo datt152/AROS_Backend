@@ -4,6 +4,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
 import vn.edu.aros.aroscore.dto.request.ClassroomRequest;
+import vn.edu.aros.aroscore.dto.request.EnrollStudentRequest;
 import vn.edu.aros.aroscore.dto.response.ClassroomResponse;
 
 public interface ClassroomService {
@@ -19,4 +20,9 @@ public interface ClassroomService {
 
     @Transactional
     void deleteClassroom(Long id);
+
+    void enrollStudents(Long classId, EnrollStudentRequest request);
+
+    void removeStudentFromClass(Long classId, Long studentId);
+
 }

@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import vn.edu.aros.aroscore.dto.request.ClassroomRequest;
+import vn.edu.aros.aroscore.dto.request.EnrollStudentRequest;
 import vn.edu.aros.aroscore.dto.response.ClassroomResponse;
 import vn.edu.aros.aroscore.service.ClassroomService;
 
@@ -55,5 +56,24 @@ public class ClassroomController {
     public ResponseEntity<Void> deleteClassroom(@PathVariable Long id) {
         classroomService.deleteClassroom(id);
         return ResponseEntity.noContent().build();
+    }
+    @PostMapping("/{id}/students/enroll")
+//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+    public ResponseEntity<String> enrollStudents(
+            @PathVariable Long id,
+            @Valid @RequestBody EnrollStudentRequest request) {
+
+        classroomService.enrollStudents(id, request);
+        return ResponseEntity.ok("Thêm sinh viên vào lớp thành công!");
+    }
+
+    @DeleteMapping("/{id}/students/{studentId}")
+//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+    public ResponseEntity<String> removeStudent(
+            @PathVariable Long id,
+            @PathVariable Long studentId) {
+
+        classroomService.removeStudentFromClass(id, studentId);
+        return ResponseEntity.ok("Đã xóa sinh viên khỏi lớp!");
     }
 }
