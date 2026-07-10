@@ -16,9 +16,12 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfigurationSource;
 import vn.edu.aros.aroscore.filter.JwtAuthenticationFilter;
 import vn.edu.aros.aroscore.service.CustomUserDetailsService;
-
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import java.util.Arrays;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity // Cho phép phân quyền bằng annotation @PreAuthorize trên Controller
@@ -54,6 +57,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(csrf -> csrf.disable())
                 // Tắt CSRF vì chúng ta xài JWT, không xài Cookie
                 .csrf(AbstractHttpConfigurer::disable)
 
@@ -68,7 +73,8 @@ public class SecurityConfig {
                                 .requestMatchers("/api/test-jwt").permitAll()
 
                                 // Mở cửa hoàn toàn cho Swagger UI
-                                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/login", "/api/v1/subjects/**", "/api/v1/classes/**" ).permitAll()
+
 
                                 // TẤT CẢ các đường dẫn còn lại đều bị khóa, bắt buộc phải có Token
                                 .anyRequest().authenticated()
@@ -81,5 +87,25 @@ public class SecurityConfig {
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+
+        // Cấu hình các domain được phép gọi (Thay * bằng domain frontend thật sau này)
+        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
+
+        // Các phương thức được phép
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+
+        // Các header được phép gửi lên
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept"));
+
+        // Cho phép gửi cookie/token
+        configuration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration); // Áp dụng cho mọi API
+        return source;
     }
 }

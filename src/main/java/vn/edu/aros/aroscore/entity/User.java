@@ -21,13 +21,15 @@ public class User {
     @Column(nullable = false, unique = true, length = 150)
     private String email;
 
+    @Column(name = "phone", length = 15)
+    private String phone; // Bổ sung để khớp với nghiệp vụ
+
     @Column(name = "student_code", unique = true, length = 20)
-    private String studentCode; // mssv
+    private String studentCode;
 
     @Column(name = "is_active")
     private boolean isActive = true;
 
-    // Quan hệ 1-1 với Account. mappedBy chỉ ra Account là bên giữ khóa ngoại
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Account account;
 }
