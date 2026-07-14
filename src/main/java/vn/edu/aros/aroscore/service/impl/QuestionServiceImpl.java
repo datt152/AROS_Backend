@@ -86,5 +86,52 @@ public class QuestionServiceImpl implements QuestionService {
         return questionRepository.findAllByTeacherEmail(email, pageable)
                 .map(questionMapper::toResponse);
     }
+    @Override
+    @Transactional
+    public QuestionResponse updateQuestion(Long id, QuestionRequest request) {
+        String email = getCurrentUserEmail();
+
+        // 1. Tìm câu hỏi và đảm bảo nó thuộc về giáo viên đang đăng nhập
+        Question question = questionRepository.findByIdAndTeacherEmail(id, email)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy câu hỏi hoặc bạn không có quyền sửa!"));
+
+        // 2. Cập nhật môn học nếu có thay đổi
+        if (!question.getSubject().getId().equals(request.getSubjectId())) {
+            Subject subject = subjectRepository.findByIdAndLecturerEmail(request.getSubjectId(), email)
+                    .orElseThrow(() -> new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền!"));
+            question.setSubject(subject);
+        }
+
+        // 3. Validate logic loại câu hỏi
+        long correctCount = request.getOptions().stream()
+                .filter(AnswerOptionRequest::getIsCorrect)
+                .count();
+
+        if (request.getType() == QuestionType.SINGLE_CHOICE && correctCount != 1) {
+            throw new RuntimeException("Câu hỏi chọn 1 đáp án bắt buộc phải có CHÍNH XÁC 1 đáp án đúng!");
+        }
+        if (request.getType() == QuestionType.MULTIPLE_CHOICE && correctCount < 1) {
+            throw new RuntimeException("Câu hỏi chọn nhiều đáp án phải có ít nhất 1 đáp án đúng!");
+        }
+
+        // 4. Cập nhật thông tin cơ bản
+        question.setContent(request.getContent());
+        question.setDifficulty(request.getDifficulty());
+        question.setExplanation(request.getExplanation());
+        question.setType(request.getType() != null ? request.getType() : QuestionType.SINGLE_CHOICE);
+
+        // 5. Xử lý danh sách đáp án (Kỹ thuật Clear & AddAll)
+        question.getOptions().clear(); // OrphanRemoval sẽ tự động xóa các record cũ dưới DB
+        for (AnswerOptionRequest optReq : request.getOptions()) {
+            AnswerOption option = AnswerOption.builder()
+                    .content(optReq.getContent())
+                    .isCorrect(optReq.getIsCorrect())
+                    .build();
+            question.addOption(option);
+        }
+
+        return questionMapper.toResponse(questionRepository.save(question));
+    }
+
 
 }

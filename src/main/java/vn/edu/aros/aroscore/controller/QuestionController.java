@@ -32,4 +32,11 @@ public class QuestionController {
             @RequestParam(defaultValue = "10") int size) {
         return ResponseEntity.ok(questionService.getAllQuestions(subjectId, page, size));
     }
+    @PutMapping("/{id}")
+//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+    public ResponseEntity<QuestionResponse> updateQuestion(
+            @PathVariable Long id,
+            @Valid @RequestBody QuestionRequest request) {
+        return ResponseEntity.ok(questionService.updateQuestion(id, request));
+    }
 }

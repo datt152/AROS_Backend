@@ -17,5 +17,6 @@ public interface QuestionMapper {
     Question toEntity(QuestionRequest request);
 
     @Mapping(source = "subject.id", target = "subjectId")
+    @Mapping(source = "id", target = "questionId")
     QuestionResponse toResponse(Question question);
 }

@@ -7,4 +7,5 @@ import vn.edu.aros.aroscore.dto.response.QuestionResponse;
 public interface QuestionService {
     QuestionResponse createQuestion(QuestionRequest request);
     Page<QuestionResponse> getAllQuestions(Long subjectId, int page, int size);
+    QuestionResponse updateQuestion(Long id, QuestionRequest request);
 }
