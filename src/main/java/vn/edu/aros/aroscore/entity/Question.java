@@ -1,8 +1,12 @@
 package vn.edu.aros.aroscore.entity;
 
-
 import jakarta.persistence.*;
 import lombok.*;
+import vn.edu.aros.aroscore.entity.enums.Difficulty;
+import vn.edu.aros.aroscore.entity.enums.QuestionType;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "questions")
@@ -20,33 +24,34 @@ public class Question {
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
 
-    @Column(name = "option_a")
-    private String optionA;
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private Difficulty difficulty;
 
-    @Column(name = "option_b")
-    private String optionB;
+    @Column(columnDefinition = "TEXT")
+    private String explanation;
 
-    @Column(name = "option_c")
-    private String optionC;
-
-    @Column(name = "option_d")
-    private String optionD;
-
-    @Column(name = "correct_answer", length = 1)
-    private String correctAnswer;
-
-    @Column(name = "difficulty_level")
-    private Integer difficultyLevel;
-
-    private Integer chapter;
-
-    // Thuộc môn học nào
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "subject_id", nullable = false)
     private Subject subject;
 
-    // Ai là người tạo câu hỏi này
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "creator_id")
-    private User creator;
+    @JoinColumn(name = "teacher_id", nullable = false)
+    private User teacher;
+
+    // Quan hệ 1-N: 1 Câu hỏi có nhiều Đáp án
+    @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<AnswerOption> options = new ArrayList<>();
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type", length = 20, nullable = false)
+    private QuestionType type = QuestionType.SINGLE_CHOICE;
+
+
+    // Hàm tiện ích để đồng bộ quan hệ 2 chiều
+    public void addOption(AnswerOption option) {
+        options.add(option);
+        option.setQuestion(this);
+    }
 }

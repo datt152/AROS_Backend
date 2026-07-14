@@ -73,7 +73,7 @@ public class SecurityConfig {
                                 .requestMatchers("/api/test-jwt").permitAll()
 
                                 // Mở cửa hoàn toàn cho Swagger UI
-                                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/login", "/api/v1/subjects/**", "/api/v1/classes/**" ).permitAll()
+                                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/login", "/api/v1/subjects/**", "/api/v1/classes/**", "/api/v1/questions/**" ).permitAll()
 
 
                                 // TẤT CẢ các đường dẫn còn lại đều bị khóa, bắt buộc phải có Token
