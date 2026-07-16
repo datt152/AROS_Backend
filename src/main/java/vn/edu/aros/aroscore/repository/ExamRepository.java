@@ -1,12 +1,13 @@
 package vn.edu.aros.aroscore.repository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 import vn.edu.aros.aroscore.entity.Exam;
-import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 
-import java.util.List;
-
+@Repository
 public interface ExamRepository extends JpaRepository<Exam, Long> {
-    List<Exam> findBySubjectId(Long subjectId);
-    List<Exam> findByStatus(ExamStatus status);
+    // Lấy danh sách đề thi của một giáo viên
+    Page<Exam> findAllByTeacherEmail(String email, Pageable pageable);
 }
