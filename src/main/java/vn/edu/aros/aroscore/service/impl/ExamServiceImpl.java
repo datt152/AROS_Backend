@@ -1,24 +1,27 @@
 package vn.edu.aros.aroscore.service.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.edu.aros.aroscore.dto.matrix.AnswerMapping;
+import vn.edu.aros.aroscore.dto.matrix.QuestionMatrix;
 import vn.edu.aros.aroscore.dto.request.ExamCreateRequest;
+import vn.edu.aros.aroscore.dto.request.ExamVersionCreateRequest;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
-import vn.edu.aros.aroscore.entity.Exam;
-import vn.edu.aros.aroscore.entity.Question;
-import vn.edu.aros.aroscore.entity.Subject;
-import vn.edu.aros.aroscore.entity.User;
+import vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse;
+import vn.edu.aros.aroscore.dto.response.OptionInVersionResponse;
+import vn.edu.aros.aroscore.dto.response.QuestionInVersionResponse;
+import vn.edu.aros.aroscore.entity.*;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
 import vn.edu.aros.aroscore.entity.enums.QuestionType;
 import vn.edu.aros.aroscore.mapper.ExamMapper;
-import vn.edu.aros.aroscore.repository.ExamRepository;
-import vn.edu.aros.aroscore.repository.QuestionRepository;
-import vn.edu.aros.aroscore.repository.SubjectRepository;
-import vn.edu.aros.aroscore.repository.UserRepository;
+import vn.edu.aros.aroscore.repository.*;
 import vn.edu.aros.aroscore.service.ExamService;
-
+import com.fasterxml.jackson.core.type.TypeReference;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -30,6 +33,8 @@ public class ExamServiceImpl implements ExamService {
     private final QuestionRepository questionRepository;
     private final UserRepository userRepository;
     private final ExamMapper examMapper;
+    private final ExamVersionRepository examVersionRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private String getCurrentUserEmail() {
         return SecurityContextHolder.getContext().getAuthentication().getName();
@@ -90,5 +95,154 @@ public class ExamServiceImpl implements ExamService {
         Exam savedExam = examRepository.save(exam);
 
         return examMapper.toResponse(savedExam);
+    }
+    @Override
+    @Transactional
+    public List<String> generateExamVersions(ExamVersionCreateRequest request) {
+        // 1. Lấy đề gốc
+        Exam exam = examRepository.findById(request.getExamId())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy Đề thi gốc!"));
+
+        // 2. Quyết định danh sách mã đề (Tự nhập hay Tự sinh)
+        List<String> finalCodes = new java.util.ArrayList<>();
+
+        if (request.getManualVersionCodes() != null && !request.getManualVersionCodes().isEmpty()) {
+            finalCodes.addAll(request.getManualVersionCodes());
+        } else if (request.getAutoGenerateCount() != null && request.getAutoGenerateCount() > 0) {
+            // Tự sinh mã từ 001, 002...
+            for (int i = 1; i <= request.getAutoGenerateCount(); i++) {
+                finalCodes.add(String.format("%03d", i));
+            }
+        } else {
+            throw new RuntimeException("Bạn phải cung cấp danh sách mã đề hoặc số lượng đề cần tự sinh!");
+        }
+
+        // 3. THUẬT TOÁN TRỘN ĐỀ
+        String[] LABELS = {"A", "B", "C", "D", "E", "F", "G", "H"}; // Hỗ trợ lên tới 8 đáp án
+        List<ExamVersion> savedVersions = new java.util.ArrayList<>();
+
+        for (String code : finalCodes) {
+            // 3.1 Clone danh sách câu hỏi gốc ra một list mới và Xáo trộn
+            List<vn.edu.aros.aroscore.entity.ExamQuestion> shuffledQuestions = new java.util.ArrayList<>(exam.getExamQuestions());
+            java.util.Collections.shuffle(shuffledQuestions);
+
+            List<vn.edu.aros.aroscore.dto.matrix.QuestionMatrix> matrixList = new java.util.ArrayList<>();
+            int newQuestionOrder = 1;
+
+            for (vn.edu.aros.aroscore.entity.ExamQuestion eq : shuffledQuestions) {
+                vn.edu.aros.aroscore.entity.Question q = eq.getQuestion();
+
+                // 3.2 Clone danh sách đáp án của câu hỏi này và Xáo trộn
+                List<vn.edu.aros.aroscore.entity.AnswerOption> shuffledOptions = new java.util.ArrayList<>(q.getOptions());
+                java.util.Collections.shuffle(shuffledOptions);
+
+                // 3.3 Lưu vết đáp án (Map ID đáp án cũ với nhãn A, B, C, D mới)
+                List<vn.edu.aros.aroscore.dto.matrix.AnswerMapping> answerMappings = new java.util.ArrayList<>();
+                for (int i = 0; i < shuffledOptions.size(); i++) {
+                    vn.edu.aros.aroscore.entity.AnswerOption opt = shuffledOptions.get(i);
+                    answerMappings.add(new vn.edu.aros.aroscore.dto.matrix.AnswerMapping(
+                            opt.getId(),
+                            LABELS[i],
+                            opt.getIsCorrect()
+                    ));
+                }
+
+                // 3.4 Lưu vết câu hỏi
+                matrixList.add(new vn.edu.aros.aroscore.dto.matrix.QuestionMatrix(
+                        q.getId(),
+                        newQuestionOrder,
+                        answerMappings
+                ));
+                newQuestionOrder++;
+            }
+
+            // 4. Parse Ma trận thành JSON String và tạo ExamVersion
+            try {
+                String jsonMatrix = objectMapper.writeValueAsString(matrixList);
+
+                vn.edu.aros.aroscore.entity.ExamVersion version = vn.edu.aros.aroscore.entity.ExamVersion.builder()
+                        .exam(exam)
+                        .versionCode(code)
+                        .shuffleMatrix(jsonMatrix)
+                        .build();
+
+                savedVersions.add(version);
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException("Lỗi hệ thống khi sinh ma trận hoán vị JSON", e);
+            }
+        }
+
+        // 5. Lưu toàn bộ các mã đề xuống Database (Batch Insert)
+        examVersionRepository.saveAll(savedVersions);
+
+        return finalCodes; // Trả về danh sách mã đề đã tạo thành công
+    }
+    @Override
+    @Transactional(readOnly = true)
+    public ExamVersionDetailResponse getExamVersionDetail(Long examId, String versionCode) throws JsonProcessingException {
+        // 1. Tìm mã đề
+        ExamVersion version = examVersionRepository.findByExamIdAndVersionCode(examId, versionCode)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy mã đề " + versionCode + " của kỳ thi này!"));
+
+        Exam exam = version.getExam();
+
+        // 2. Đọc chuỗi JSON thành List<QuestionMatrix>
+        List<QuestionMatrix> matrixList = objectMapper.readValue(
+                version.getShuffleMatrix(),
+                new TypeReference<List<QuestionMatrix>>() {}
+        );
+
+        // Đảm bảo list đã được sắp xếp theo đúng thứ tự câu 1, 2, 3...
+        matrixList.sort(Comparator.comparingInt(QuestionMatrix::getNewOrder));
+
+        List<QuestionInVersionResponse> questionResponses = new java.util.ArrayList<>();
+
+        // 3. Vòng lặp giải mã từng câu hỏi
+        for (QuestionMatrix qMatrix : matrixList) {
+
+            // Tìm lại câu hỏi gốc từ DB
+            ExamQuestion originalEq = exam.getExamQuestions().stream()
+                    .filter(eq -> eq.getQuestion().getId().equals(qMatrix.getOriginalQuestionId()))
+                    .findFirst()
+                    .orElseThrow();
+
+            Question originalQ = originalEq.getQuestion();
+
+            // Ánh xạ lại danh sách đáp án
+            List<OptionInVersionResponse> optionResponses = new java.util.ArrayList<>();
+            for (AnswerMapping aMap : qMatrix.getAnswerMappings()) {
+                AnswerOption originalOpt = originalQ.getOptions().stream()
+                        .filter(opt -> opt.getId().equals(aMap.getOriginalOptionId()))
+                        .findFirst()
+                        .orElseThrow();
+
+                OptionInVersionResponse optRes = new OptionInVersionResponse();
+                optRes.setLabel(aMap.getNewLabel()); // Gắn nhãn A, B, C, D
+                optRes.setContent(originalOpt.getContent());
+                optionResponses.add(optRes);
+            }
+
+            // Sắp xếp các đáp án theo vần A, B, C, D
+            optionResponses.sort(Comparator.comparing(OptionInVersionResponse::getLabel));
+
+            // Đóng gói câu hỏi
+            QuestionInVersionResponse qRes = new QuestionInVersionResponse();
+            qRes.setOriginalQuestionId(originalQ.getId());
+            qRes.setContent(originalQ.getContent());
+            qRes.setType(originalQ.getType());
+            qRes.setOptions(optionResponses);
+
+            questionResponses.add(qRes);
+        }
+
+        // 4. Trả về kết quả tổng
+        ExamVersionDetailResponse response = new ExamVersionDetailResponse();
+        response.setExamId(exam.getId());
+        response.setTitle(exam.getTitle());
+        response.setDuration(exam.getDuration());
+        response.setVersionCode(version.getVersionCode());
+        response.setQuestions(questionResponses);
+
+        return response;
     }
 }
