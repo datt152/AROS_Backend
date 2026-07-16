@@ -77,9 +77,10 @@ public class ExamServiceImpl implements ExamService {
                 .examMode(request.getExamMode())
                 .subject(subject)
                 .teacher(teacher)
+                .maxScore(request.getMaxScore()) // Lưu thang điểm chuẩn
                 .build();
 
-        // 5. Gắp câu hỏi vào đề
+        // 5. Gắp câu hỏi vào đề và gán điểm thô (trọng số)
         int order = 1;
         for (Long questionId : request.getQuestionIds()) {
             Question matchedQuestion = questions.stream()
@@ -87,7 +88,13 @@ public class ExamServiceImpl implements ExamService {
                     .findFirst()
                     .orElseThrow();
 
-            exam.addQuestion(matchedQuestion, order);
+            // Xử lý điểm thô: Mặc định là 1.0. Nếu có gán tay thì lấy giá trị gán tay.
+            Double rawPoint = 1.0;
+            if (request.getRawPoints() != null && request.getRawPoints().containsKey(questionId)) {
+                rawPoint = request.getRawPoints().get(questionId);
+            }
+
+            exam.addQuestion(matchedQuestion, order, rawPoint);
             order++;
         }
 

@@ -26,4 +26,12 @@ public class ExamCreateRequest {
 
     @NotEmpty(message = "Đề thi phải có ít nhất 1 câu hỏi")
     private List<Long> questionIds; // Mảng chứa ID các câu hỏi được chọn
+
+    @NotNull(message = "Thang điểm chuẩn không được để trống (VD: 10.0)")
+    private Double maxScore;
+
+    // Tùy chọn: Map lưu trọng số riêng cho từng câu.
+    // Key: ID câu hỏi, Value: Điểm thô (Ví dụ câu khó cho 2 điểm thô).
+    // Nếu Frontend không gửi trường này, Backend tự hiểu mọi câu đều là 1 điểm thô.
+    private java.util.Map<Long, Double> rawPoints;
 }

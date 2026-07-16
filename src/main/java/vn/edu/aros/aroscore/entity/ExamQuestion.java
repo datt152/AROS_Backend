@@ -26,4 +26,7 @@ public class ExamQuestion {
 
     @Column(name = "question_order", nullable = false)
     private Integer questionOrder;
+
+    @Column(name = "raw_point", nullable = false)
+    private Double rawPoint;
 }

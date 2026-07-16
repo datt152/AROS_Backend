@@ -53,13 +53,16 @@ public class Exam {
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
     }
-
+    @Column(name = "max_score", nullable = false)
+    @Builder.Default
+    private Double maxScore = 10.0; // Thang điểm chuẩn (Mặc định 10)
     // Helper method để tiện add câu hỏi vào đề gốc
-    public void addQuestion(Question question, Integer order) {
+    public void addQuestion(Question question, Integer order, Double rawPoint) {
         ExamQuestion eq = ExamQuestion.builder()
                 .exam(this)
                 .question(question)
                 .questionOrder(order)
+                .rawPoint(rawPoint)
                 .build();
         this.examQuestions.add(eq);
     }
