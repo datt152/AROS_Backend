@@ -70,4 +70,11 @@ public class ExamController {
         examService.deleteExam(id);
         return ResponseEntity.noContent().build();
     }
+
+    @GetMapping("/{id}/take")
+//    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<vn.edu.aros.aroscore.dto.response.ExamTakeResponse> takeExam(@PathVariable Long id) {
+        return ResponseEntity.ok(examService.takeExam(id));
+    }
+
 }

@@ -3,6 +3,7 @@ package vn.edu.aros.aroscore.service.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -13,10 +14,7 @@ import vn.edu.aros.aroscore.dto.matrix.QuestionMatrix;
 import vn.edu.aros.aroscore.dto.request.ExamCreateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamUpdateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamVersionCreateRequest;
-import vn.edu.aros.aroscore.dto.response.ExamResponse;
-import vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse;
-import vn.edu.aros.aroscore.dto.response.OptionInVersionResponse;
-import vn.edu.aros.aroscore.dto.response.QuestionInVersionResponse;
+import vn.edu.aros.aroscore.dto.response.*;
 import vn.edu.aros.aroscore.entity.*;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
 import vn.edu.aros.aroscore.entity.enums.QuestionType;
@@ -308,5 +306,74 @@ public class ExamServiceImpl implements ExamService {
         // Kiểm tra xem đề thi đã có học sinh nộp bài chưa
         // Nếu có rồi thì không cho xóa để bảo toàn dữ liệu điểm số
         examRepository.delete(exam);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    @SneakyThrows
+    public ExamTakeResponse takeExam(Long examId) {
+        Exam exam = getExamById(examId);
+
+        // 1. Lấy danh sách các mã đề của bài thi này
+        List<ExamVersion> versions = examVersionRepository.findByExamId(examId);
+        if (versions.isEmpty()) {
+            throw new RuntimeException("Bài thi chưa được tạo mã đề!");
+        }
+
+        // 2. Chọn ngẫu nhiên 1 mã đề cho học sinh
+        ExamVersion randomVersion = versions.get(new java.util.Random().nextInt(versions.size()));
+
+        // 3. Giải mã ma trận hoán vị
+        List<QuestionMatrix> matrixList = objectMapper.readValue(
+                randomVersion.getShuffleMatrix(),
+                new com.fasterxml.jackson.core.type.TypeReference<List<QuestionMatrix>>(){}
+        );
+
+        // 4. Xây dựng danh sách câu hỏi để giao cho học sinh
+        List<QuestionTakeResponse> questionDTOs = new java.util.ArrayList<>();
+
+        for (QuestionMatrix qm : matrixList) {
+            // Lấy câu hỏi gốc từ DB
+            Question originalQ = exam.getExamQuestions().stream()
+                    .filter(eq -> eq.getQuestion().getId().equals(qm.getOriginalQuestionId()))
+                    .findFirst()
+                    .map(ExamQuestion::getQuestion)
+                    .orElseThrow(() -> new RuntimeException("Lỗi đồng bộ dữ liệu câu hỏi"));
+
+            // Ánh xạ đáp án theo ma trận
+            List<OptionTakeResponse> optionDTOs = qm.getAnswerMappings().stream()
+                    .map(mapping -> {
+                        // Tìm nội dung đáp án gốc dựa vào ID gốc được lưu trong ma trận
+                        String answerContent = originalQ.getOptions().stream() // Giả sử Question có list getAnswers()
+                                .filter(a -> a.getId().equals(mapping.getOriginalOptionId()))
+                                .findFirst()
+                                .map(vn.edu.aros.aroscore.entity.AnswerOption::getContent)
+                                .orElse("");
+
+                        return OptionTakeResponse.builder()
+                                .label(mapping.getNewLabel()) // Nhãn mới (A, B, C...) sau khi trộn
+                                .content(answerContent)
+                                .build();
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+
+            // Sắp xếp lại danh sách lựa chọn theo A, B, C, D cho đẹp
+            optionDTOs.sort(java.util.Comparator.comparing(OptionTakeResponse::getLabel));
+
+            questionDTOs.add(QuestionTakeResponse.builder()
+                    .questionId(originalQ.getId())
+                    .content(originalQ.getContent())
+                    .options(optionDTOs)
+                    .build());
+        }
+
+        // 5. Trả về Response hoàn chỉnh
+        return ExamTakeResponse.builder()
+                .examId(exam.getId())
+                .title(exam.getTitle())
+                .duration(exam.getDuration())
+                .versionCode(randomVersion.getVersionCode())
+                .questions(questionDTOs)
+                .build();
     }
 }

@@ -8,6 +8,7 @@ import vn.edu.aros.aroscore.dto.request.ExamCreateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamUpdateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamVersionCreateRequest;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
+import vn.edu.aros.aroscore.dto.response.ExamTakeResponse;
 import vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse;
 import vn.edu.aros.aroscore.entity.Exam;
 
@@ -27,4 +28,6 @@ public interface ExamService {
 
     @Transactional
     void deleteExam(Long id);
+
+    ExamTakeResponse takeExam(Long examId);
 }
