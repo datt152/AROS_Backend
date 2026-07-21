@@ -1,5 +1,6 @@
 package vn.edu.aros.aroscore.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
@@ -32,10 +33,12 @@ public class Exam {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "subject_id", nullable = false)
+    @JsonIgnore
     private Subject subject;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "teacher_id", nullable = false)
+    @JsonIgnore
     private User teacher;
 
     @Column(name = "created_at", nullable = false, updatable = false)

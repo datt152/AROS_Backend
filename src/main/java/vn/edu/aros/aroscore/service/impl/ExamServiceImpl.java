@@ -3,12 +3,15 @@ package vn.edu.aros.aroscore.service.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.edu.aros.aroscore.dto.matrix.AnswerMapping;
 import vn.edu.aros.aroscore.dto.matrix.QuestionMatrix;
 import vn.edu.aros.aroscore.dto.request.ExamCreateRequest;
+import vn.edu.aros.aroscore.dto.request.ExamUpdateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamVersionCreateRequest;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse;
@@ -251,5 +254,59 @@ public class ExamServiceImpl implements ExamService {
         response.setQuestions(questionResponses);
 
         return response;
+    }
+    @Override
+    public Page<Exam> getAllExams(Pageable pageable) {
+        // Lấy thông tin user đang đăng nhập
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User currentUser = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin người dùng"));
+
+        // Kiểm tra xem User này có phải ADMIN không
+        boolean isAdmin = SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+        if (isAdmin) {
+            // Admin thì được xem tất cả
+            return examRepository.findAll(pageable);
+        } else {
+            // Giáo viên thì chỉ xem đề thi của chính mình
+            return examRepository.findAllByTeacherEmail(currentUser.getEmail(), pageable);
+        }
+    }
+
+    @Override
+    public Exam getExamById(Long id) {
+        return examRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đề thi với ID: " + id));
+    }
+
+    @Transactional
+    @Override
+    public Exam updateExam(Long id, ExamUpdateRequest request) {
+        Exam exam = getExamById(id);
+
+        // Cập nhật thông tin cơ bản
+        exam.setTitle(request.getTitle());
+        exam.setDuration(request.getDuration());
+        exam.setExamMode(request.getExamMode());
+        exam.setMaxScore(request.getMaxScore());
+
+        // (Tùy chọn) Cập nhật Subject nếu có thay đổi
+        if (!exam.getSubject().getId().equals(request.getSubjectId())) {
+            Subject subject = subjectRepository.findById(request.getSubjectId())
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy môn học"));
+            exam.setSubject(subject);
+        }
+        return examRepository.save(exam);
+    }
+
+    @Transactional
+    @Override
+    public void deleteExam(Long id) {
+        Exam exam = getExamById(id);
+        // Kiểm tra xem đề thi đã có học sinh nộp bài chưa
+        // Nếu có rồi thì không cho xóa để bảo toàn dữ liệu điểm số
+        examRepository.delete(exam);
     }
 }

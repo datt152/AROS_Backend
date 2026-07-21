@@ -1,6 +1,7 @@
 package vn.edu.aros.aroscore.entity;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -36,12 +37,14 @@ public class Classroom {
 
     // Lớp này thuộc về Môn học nào
     @ManyToOne(fetch = FetchType.LAZY)
+    @JsonIgnore
     @JoinColumn(name = "subject_id", nullable = false)
     private Subject subject;
 
     // Quan hệ N-N: Một lớp có nhiều sinh viên, sinh viên học nhiều lớp
     // JPA sẽ tự động tạo bảng trung gian 'classroom_students'
     @ManyToMany
+    @JsonIgnore
     @JoinTable(
             name = "classroom_students",
             joinColumns = @JoinColumn(name = "classroom_id"),
