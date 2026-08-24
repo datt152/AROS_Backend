@@ -34,7 +34,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String jwt = parseJwt(request);
 
             // 2. Nếu có JWT và nó hợp lệ
-            if (jwt != null && jwtUtils.validateJwtToken(jwt)) {
+            if (jwt != null && jwtUtils.validateAccessToken(jwt)) {
 
                 // Giải mã lấy username
                 String email = jwtUtils.getEmailFromToken(jwt);

@@ -10,12 +10,15 @@ import org.springframework.transaction.annotation.Transactional;
 import vn.edu.aros.aroscore.dto.CustomUserDetails;
 import vn.edu.aros.aroscore.dto.request.LoginRequest;
 import vn.edu.aros.aroscore.dto.request.RegisterRequest;
+import vn.edu.aros.aroscore.dto.response.AuthSession;
 import vn.edu.aros.aroscore.dto.response.LoginResponse;
 import vn.edu.aros.aroscore.entity.Account;
 import vn.edu.aros.aroscore.entity.User;
 import vn.edu.aros.aroscore.entity.enums.UserRole;
+import vn.edu.aros.aroscore.exception.UnauthorizedException;
 import vn.edu.aros.aroscore.repository.AccountRepository;
 import vn.edu.aros.aroscore.service.AuthService;
+import vn.edu.aros.aroscore.service.CustomUserDetailsService;
 import vn.edu.aros.aroscore.utils.JwtUtils;
 
 @Service
@@ -24,6 +27,7 @@ public class AuthServiceImpl implements AuthService {
     @Autowired private AccountRepository accountRepository;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private AuthenticationManager authenticationManager;
+    @Autowired private CustomUserDetailsService customUserDetailsService;
     @Autowired private JwtUtils jwtUtils;
 
     @Override
@@ -60,21 +64,36 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public LoginResponse authenticateUser(LoginRequest request) {
+    public AuthSession authenticateUser(LoginRequest request) {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
 
         CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
-
         String email = userDetails.getUsername();
+
+        return AuthSession.builder()
+                .loginResponse(buildLoginResponse(userDetails, jwtUtils.generateAccessToken(email)))
+                .refreshToken(jwtUtils.generateRefreshToken(email))
+                .build();
+    }
+
+    @Override
+    public LoginResponse refreshAccessToken(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank() || !jwtUtils.validateRefreshToken(refreshToken)) {
+            throw new UnauthorizedException("Refresh token không hợp lệ hoặc đã hết hạn");
+        }
+
+        String email = jwtUtils.getEmailFromToken(refreshToken);
+        CustomUserDetails userDetails = (CustomUserDetails) customUserDetailsService.loadUserByUsername(email);
+        return buildLoginResponse(userDetails, jwtUtils.generateAccessToken(email));
+    }
+
+    private LoginResponse buildLoginResponse(CustomUserDetails userDetails, String accessToken) {
         String role = userDetails.getAuthorities().iterator().next().getAuthority();
-
-        String jwt = jwtUtils.generateToken(email);
-
         return LoginResponse.builder()
-                .accessToken(jwt)
+                .accessToken(accessToken)
                 .tokenType("Bearer")
-                .email(email)
+                .email(userDetails.getUsername())
                 .role(UserRole.valueOf(role))
                 .build();
     }

@@ -41,6 +41,7 @@ public class Exam {
     @JsonIgnore
     private User teacher;
 
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -56,6 +57,7 @@ public class Exam {
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
     }
+    private String imageUrl;
     @Column(name = "max_score", nullable = false)
     @Builder.Default
     private Double maxScore = 10.0; // Thang điểm chuẩn (Mặc định 10)
