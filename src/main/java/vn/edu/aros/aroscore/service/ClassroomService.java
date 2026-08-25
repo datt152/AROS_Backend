@@ -6,7 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import vn.edu.aros.aroscore.dto.request.ClassroomRequest;
 import vn.edu.aros.aroscore.dto.request.EnrollStudentRequest;
 import vn.edu.aros.aroscore.dto.response.ClassroomResponse;
-import vn.edu.aros.aroscore.dto.response.UserResponse;
+import vn.edu.aros.aroscore.dto.response.StudentInfoResponse;
 
 import java.util.List;
 
@@ -28,6 +28,6 @@ public interface ClassroomService {
 
     void removeStudentFromClass(Long classId, Long studentId);
 
-    List<UserResponse> getClassroomStudents(Long classId);
+    List<StudentInfoResponse> getClassroomStudents(Long classId);
 
 }

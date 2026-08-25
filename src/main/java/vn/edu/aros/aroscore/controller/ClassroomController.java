@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import vn.edu.aros.aroscore.dto.request.ClassroomRequest;
 import vn.edu.aros.aroscore.dto.request.EnrollStudentRequest;
 import vn.edu.aros.aroscore.dto.response.ClassroomResponse;
-import vn.edu.aros.aroscore.dto.response.UserResponse;
+import vn.edu.aros.aroscore.dto.response.StudentInfoResponse;
 import vn.edu.aros.aroscore.service.ClassroomService;
 
 import java.util.List;
@@ -48,7 +48,7 @@ public class ClassroomController {
 
     @GetMapping("/{id}/students")
 //    @PreAuthorize("hasRole('TEACHER')")
-    public ResponseEntity<List<UserResponse>> getClassroomStudents(@PathVariable Long id) {
+    public ResponseEntity<List<StudentInfoResponse>> getClassroomStudents(@PathVariable Long id) {
         return ResponseEntity.ok(classroomService.getClassroomStudents(id));
     }
 

@@ -11,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import vn.edu.aros.aroscore.dto.request.ClassroomRequest;
 import vn.edu.aros.aroscore.dto.request.EnrollStudentRequest;
 import vn.edu.aros.aroscore.dto.response.ClassroomResponse;
-import vn.edu.aros.aroscore.dto.response.UserResponse;
+import vn.edu.aros.aroscore.dto.response.StudentInfoResponse;
 import vn.edu.aros.aroscore.entity.Account;
 import vn.edu.aros.aroscore.entity.Classroom;
 import vn.edu.aros.aroscore.entity.Subject;
@@ -78,7 +78,7 @@ public class ClassroomServiceImpl implements ClassroomService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<UserResponse> getClassroomStudents(Long classId) {
+    public List<StudentInfoResponse> getClassroomStudents(Long classId) {
         Classroom classroom = classroomRepository.findByIdWithStudents(classId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy lớp học!"));
 
@@ -89,7 +89,7 @@ public class ClassroomServiceImpl implements ClassroomService {
         }
 
         return classroom.getStudents().stream()
-                .map(this::toUserResponse)
+                .map(this::toStudentInfoResponse)
                 .toList();
     }
 
@@ -215,16 +215,13 @@ public class ClassroomServiceImpl implements ClassroomService {
         }
     }
 
-    private UserResponse toUserResponse(User user) {
-        Account account = user.getAccount();
-        return UserResponse.builder()
+    private StudentInfoResponse toStudentInfoResponse(User user) {
+        return StudentInfoResponse.builder()
                 .id(user.getId())
-                .accountId(account != null ? account.getId() : null)
                 .fullName(user.getFullName())
                 .email(user.getEmail())
                 .phone(user.getPhone())
                 .studentCode(user.getStudentCode())
-                .role(account != null ? account.getRole() : null)
                 .build();
     }
 }
