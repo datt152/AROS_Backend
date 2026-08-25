@@ -14,6 +14,7 @@ public interface QuestionMapper {
     @Mapping(target = "subject", ignore = true)
     @Mapping(target = "teacher", ignore = true)
     @Mapping(target = "options", ignore = true)
+    @Mapping(target = "isActive", ignore = true)
     Question toEntity(QuestionRequest request);
 
     @Mapping(source = "subject.id", target = "subjectId")

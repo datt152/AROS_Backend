@@ -39,4 +39,11 @@ public class QuestionController {
             @Valid @RequestBody QuestionRequest request) {
         return ResponseEntity.ok(questionService.updateQuestion(id, request));
     }
+
+    @DeleteMapping("/{id}")
+//    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<String> softDeleteQuestion(@PathVariable Long id) {
+        questionService.softDeleteQuestion(id);
+        return ResponseEntity.ok("Đã xóa câu hỏi khỏi ngân hàng!");
+    }
 }

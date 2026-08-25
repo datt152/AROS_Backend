@@ -60,7 +60,7 @@ public class QuestionServiceImpl implements QuestionService {
         Question question = questionMapper.toEntity(request);
         question.setSubject(subject);
         question.setTeacher(teacher);
-
+        question.setIsActive(true);
 
         // Xử lý list đáp án (quan hệ 2 chiều)
         for (AnswerOptionRequest optReq : request.getOptions()) {
@@ -91,8 +91,8 @@ public class QuestionServiceImpl implements QuestionService {
     public QuestionResponse updateQuestion(Long id, QuestionRequest request) {
         String email = getCurrentUserEmail();
 
-        // 1. Tìm câu hỏi và đảm bảo nó thuộc về giáo viên đang đăng nhập
-        Question question = questionRepository.findByIdAndTeacherEmail(id, email)
+        // 1. Tìm câu hỏi active và đảm bảo nó thuộc về giáo viên đang đăng nhập
+        Question question = questionRepository.findActiveByIdAndTeacherEmail(id, email)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy câu hỏi hoặc bạn không có quyền sửa!"));
 
         // 2. Cập nhật môn học nếu có thay đổi
@@ -133,5 +133,18 @@ public class QuestionServiceImpl implements QuestionService {
         return questionMapper.toResponse(questionRepository.save(question));
     }
 
+    @Override
+    @Transactional
+    public void softDeleteQuestion(Long id) {
+        String email = getCurrentUserEmail();
+        Question question = questionRepository.findByIdAndTeacherEmail(id, email)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy câu hỏi hoặc bạn không có quyền xóa!"));
 
+        if (Boolean.FALSE.equals(question.getIsActive())) {
+            throw new RuntimeException("Câu hỏi đã được xóa khỏi ngân hàng!");
+        }
+
+        question.setIsActive(false);
+        questionRepository.save(question);
+    }
 }

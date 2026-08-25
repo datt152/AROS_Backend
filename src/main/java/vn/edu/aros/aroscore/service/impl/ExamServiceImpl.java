@@ -60,6 +60,11 @@ public class ExamServiceImpl implements ExamService {
 
         // 3. Kiểm tra loại câu hỏi
         for (Question q : questions) {
+            // Check 3.0: Không gắn câu hỏi đã soft-delete vào đề mới
+            if (Boolean.FALSE.equals(q.getIsActive())) {
+                throw new RuntimeException("Câu hỏi ID " + q.getId() + " đã bị xóa khỏi ngân hàng, không thể thêm vào đề mới!");
+            }
+
             // Check 3.1: Câu hỏi có thuộc đúng môn học này không?
             if (!q.getSubject().getId().equals(subject.getId())) {
                 throw new RuntimeException("Câu hỏi ID " + q.getId() + " không thuộc môn học này!");

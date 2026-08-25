@@ -13,11 +13,14 @@ import java.util.Optional;
 @Repository
 public interface QuestionRepository extends JpaRepository<Question, Long> {
 
-    @Query("SELECT q FROM Question q WHERE q.teacher.email = :email")
+    @Query("SELECT q FROM Question q WHERE q.teacher.email = :email AND q.isActive = true")
     Page<Question> findAllByTeacherEmail(@Param("email") String email, Pageable pageable);
 
-    @Query("SELECT q FROM Question q WHERE q.subject.id = :subjectId AND q.teacher.email = :email")
+    @Query("SELECT q FROM Question q WHERE q.subject.id = :subjectId AND q.teacher.email = :email AND q.isActive = true")
     Page<Question> findAllBySubjectIdAndTeacherEmail(@Param("subjectId") Long subjectId, @Param("email") String email, Pageable pageable);
+
+    @Query("SELECT q FROM Question q WHERE q.id = :id AND q.teacher.email = :email AND q.isActive = true")
+    Optional<Question> findActiveByIdAndTeacherEmail(@Param("id") Long id, @Param("email") String email);
 
     @Query("SELECT q FROM Question q WHERE q.id = :id AND q.teacher.email = :email")
     Optional<Question> findByIdAndTeacherEmail(@Param("id") Long id, @Param("email") String email);
