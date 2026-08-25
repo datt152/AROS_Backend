@@ -12,7 +12,10 @@ import org.springframework.web.bind.annotation.*;
 import vn.edu.aros.aroscore.dto.request.ClassroomRequest;
 import vn.edu.aros.aroscore.dto.request.EnrollStudentRequest;
 import vn.edu.aros.aroscore.dto.response.ClassroomResponse;
+import vn.edu.aros.aroscore.dto.response.UserResponse;
 import vn.edu.aros.aroscore.service.ClassroomService;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/classes")
@@ -22,13 +25,13 @@ public class ClassroomController {
     private ClassroomService classroomService;
 
     @PostMapping
-//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<ClassroomResponse> createClassroom(@Valid @RequestBody ClassroomRequest request) {
         return new ResponseEntity<>(classroomService.createClassroom(request), HttpStatus.CREATED);
     }
 
     @GetMapping
-//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Page<ClassroomResponse>> getAllClassrooms(
             @RequestParam(required = false) Long subjectId,
             @RequestParam(defaultValue = "0") int page,
@@ -38,13 +41,19 @@ public class ClassroomController {
     }
 
     @GetMapping("/{id}")
-//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<ClassroomResponse> getClassroomById(@PathVariable Long id) {
         return ResponseEntity.ok(classroomService.getClassroomById(id));
     }
 
+    @GetMapping("/{id}/students")
+//    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<List<UserResponse>> getClassroomStudents(@PathVariable Long id) {
+        return ResponseEntity.ok(classroomService.getClassroomStudents(id));
+    }
+
     @PutMapping("/{id}")
-//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<ClassroomResponse> updateClassroom(
             @PathVariable Long id,
             @Valid @RequestBody ClassroomRequest request) {
@@ -52,13 +61,13 @@ public class ClassroomController {
     }
 
     @DeleteMapping("/{id}")
-//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Void> deleteClassroom(@PathVariable Long id) {
         classroomService.deleteClassroom(id);
         return ResponseEntity.noContent().build();
     }
     @PostMapping("/{id}/students/enroll")
-//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<String> enrollStudents(
             @PathVariable Long id,
             @Valid @RequestBody EnrollStudentRequest request) {
@@ -68,7 +77,7 @@ public class ClassroomController {
     }
 
     @DeleteMapping("/{id}/students/{studentId}")
-//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<String> removeStudent(
             @PathVariable Long id,
             @PathVariable Long studentId) {

@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import vn.edu.aros.aroscore.entity.Classroom;
 
-import java.util.List;
+import java.util.Optional;
 
 public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
     @Query("SELECT c FROM Classroom c WHERE c.subject.lecturer.email = :email")
@@ -17,5 +17,8 @@ public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
     Page<Classroom> findAllBySubjectIdAndLecturerEmail(@Param("subjectId") Long subjectId, @Param("email") String email, Pageable pageable);
 
     boolean existsByClassNameAndSubjectId(String className, Long subjectId);
+
+    @Query("SELECT DISTINCT c FROM Classroom c LEFT JOIN FETCH c.students s LEFT JOIN FETCH s.account WHERE c.id = :id")
+    Optional<Classroom> findByIdWithStudents(@Param("id") Long id);
 }
 
