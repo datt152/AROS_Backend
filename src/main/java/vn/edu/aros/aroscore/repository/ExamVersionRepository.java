@@ -9,8 +9,12 @@ import java.util.Optional;
 
 @Repository
 public interface ExamVersionRepository extends JpaRepository<ExamVersion, Long> {
-    // Dùng để OMR tìm kiếm mã đề khi chấm điểm
+
     Optional<ExamVersion> findByExamIdAndVersionCode(Long examId, String versionCode);
 
     List<ExamVersion> findByExamId(Long examId);
+
+    boolean existsByExamIdAndVersionCode(Long examId, String versionCode);
+
+    void deleteByExamIdAndVersionCodeIn(Long examId, List<String> versionCodes);
 }

@@ -7,7 +7,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "submissions")
+@Table(name = "submissions", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_submission_exam_student", columnNames = {"exam_id", "student_id"})
+})
 @Getter
 @Setter
 @NoArgsConstructor

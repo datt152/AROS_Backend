@@ -10,21 +10,22 @@ import vn.edu.aros.aroscore.dto.request.ExamVersionCreateRequest;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTakeResponse;
 import vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse;
-import vn.edu.aros.aroscore.entity.Exam;
 
 import java.util.List;
 
 public interface ExamService {
     ExamResponse createExam(ExamCreateRequest request);
+
     List<String> generateExamVersions(ExamVersionCreateRequest request);
+
     ExamVersionDetailResponse getExamVersionDetail(Long examId, String versionCode) throws JsonProcessingException;
 
-    Page<Exam> getAllExams(Pageable pageable);
+    Page<ExamResponse> getAllExams(Pageable pageable);
 
-    Exam getExamById(Long id);
+    ExamResponse getExamById(Long id);
 
     @Transactional
-    Exam updateExam(Long id, ExamUpdateRequest request);
+    ExamResponse updateExam(Long id, ExamUpdateRequest request);
 
     @Transactional
     void deleteExam(Long id);

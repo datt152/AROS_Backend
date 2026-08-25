@@ -5,7 +5,9 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "exam_versions")
+@Table(name = "exam_versions", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_exam_version_code", columnNames = {"exam_id", "version_code"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -26,5 +28,5 @@ public class ExamVersion {
     private String versionCode;
 
     @Column(name = "shuffle_matrix", columnDefinition = "TEXT", nullable = false)
-    private String shuffleMatrix; // Chuỗi JSON lưu ma trận hoán vị
+    private String shuffleMatrix;
 }
