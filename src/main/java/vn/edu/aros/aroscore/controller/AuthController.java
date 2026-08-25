@@ -63,6 +63,14 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/logout")
+    public ResponseEntity<String> logout() {
+        ResponseCookie expiredCookie = buildRefreshCookie("", 0);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, expiredCookie.toString())
+                .body("Đăng xuất thành công!");
+    }
+
     private ResponseCookie buildRefreshCookie(String refreshToken, long maxAgeSeconds) {
         return ResponseCookie.from(REFRESH_COOKIE_NAME, refreshToken)
                 .httpOnly(true)

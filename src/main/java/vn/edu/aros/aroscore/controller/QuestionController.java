@@ -19,13 +19,13 @@ public class QuestionController {
     private QuestionService questionService;
 
     @PostMapping
-//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<QuestionResponse> createQuestion(@Valid @RequestBody QuestionRequest request) {
         return new ResponseEntity<>(questionService.createQuestion(request), HttpStatus.CREATED);
     }
 
     @GetMapping
-//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Page<QuestionResponse>> getAllQuestions(
             @RequestParam(required = false) Long subjectId,
             @RequestParam(defaultValue = "0") int page,
@@ -33,7 +33,7 @@ public class QuestionController {
         return ResponseEntity.ok(questionService.getAllQuestions(subjectId, page, size));
     }
     @PutMapping("/{id}")
-//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<QuestionResponse> updateQuestion(
             @PathVariable Long id,
             @Valid @RequestBody QuestionRequest request) {

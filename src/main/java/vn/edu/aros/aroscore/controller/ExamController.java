@@ -24,25 +24,25 @@ public class ExamController {
     private final ExamService examService;
 
     @PostMapping
-//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<ExamResponse> createExam(@Valid @RequestBody ExamCreateRequest request) {
         ExamResponse response = examService.createExam(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
     @PostMapping("/versions")
-//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<java.util.List<String>> generateExamVersions(@Valid @RequestBody vn.edu.aros.aroscore.dto.request.ExamVersionCreateRequest request) {
         return ResponseEntity.ok(examService.generateExamVersions(request));
     }
     @GetMapping("/{examId}/versions/{versionCode}")
-//    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse> getExamVersion(
             @PathVariable Long examId,
             @PathVariable String versionCode) throws JsonProcessingException {
         return ResponseEntity.ok(examService.getExamVersionDetail(examId, versionCode));
     }
     @GetMapping
-//    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Page<Exam>> getAllExams(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
@@ -53,19 +53,19 @@ public class ExamController {
     }
 
     @GetMapping("/{id}")
-//    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Exam> getExamById(@PathVariable Long id) {
         return ResponseEntity.ok(examService.getExamById(id));
     }
 
     @PutMapping("/{id}")
-//    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Exam> updateExam(@PathVariable Long id, @Valid @RequestBody ExamUpdateRequest request) {
         return ResponseEntity.ok(examService.updateExam(id, request));
     }
 
     @DeleteMapping("/{id}")
-//    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+//    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Void> deleteExam(@PathVariable Long id) {
         examService.deleteExam(id);
         return ResponseEntity.noContent().build();

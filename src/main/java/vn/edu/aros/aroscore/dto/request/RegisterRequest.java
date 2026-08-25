@@ -3,6 +3,7 @@ package vn.edu.aros.aroscore.dto.request;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import vn.edu.aros.aroscore.entity.enums.UserRole;
@@ -26,5 +27,6 @@ public class RegisterRequest {
     @NotBlank(message = "Xác nhận mật khẩu không được để trống")
     private String confirmPassword;
 
-    private UserRole role = UserRole.TEACHER;
+    @NotNull(message = "Role không được để trống")
+    private UserRole role;
 }

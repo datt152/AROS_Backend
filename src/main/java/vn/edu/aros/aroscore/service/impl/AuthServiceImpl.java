@@ -38,28 +38,34 @@ public class AuthServiceImpl implements AuthService {
             throw new RuntimeException("Mật khẩu xác nhận không khớp!");
         }
 
-        // 2. Kiểm tra trùng lặp Email
+        // 2. Chỉ cho phép đăng ký TEACHER hoặc STUDENT
+        UserRole role = request.getRole();
+        if (role != UserRole.TEACHER && role != UserRole.STUDENT) {
+            throw new RuntimeException("Role đăng ký chỉ được phép là TEACHER hoặc STUDENT!");
+        }
+
+        // 3. Kiểm tra trùng lặp Email (1 email = 1 account / 1 role)
         if (accountRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Email đã tồn tại trong hệ thống!");
         }
 
-        // 3. Khởi tạo Profile User trước
+        // 4. Khởi tạo Profile User trước
         User user = new User();
         user.setFullName(request.getFullName());
         user.setEmail(request.getEmail());
         user.setPhone(request.getPhone());
         user.setActive(true);
 
-        // 4. Khởi tạo Account và liên kết với User
+        // 5. Khởi tạo Account và liên kết với User
         Account account = new Account();
         account.setEmail(request.getEmail());
         account.setPassword(passwordEncoder.encode(request.getPassword()));
-        account.setRole(request.getRole());
+        account.setRole(role);
 
         // Gắn User vào Account. Nhờ cascade = CascadeType.ALL ở Account, User sẽ tự động được lưu.
         account.setUser(user);
 
-        // 5. Lưu xuống Database
+        // 6. Lưu xuống Database
         accountRepository.save(account);
     }
 

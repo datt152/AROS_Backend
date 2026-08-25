@@ -255,22 +255,11 @@ public class ExamServiceImpl implements ExamService {
     }
     @Override
     public Page<Exam> getAllExams(Pageable pageable) {
-        // Lấy thông tin user đang đăng nhập
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         User currentUser = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin người dùng"));
 
-        // Kiểm tra xem User này có phải ADMIN không
-        boolean isAdmin = SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
-
-        if (isAdmin) {
-            // Admin thì được xem tất cả
-            return examRepository.findAll(pageable);
-        } else {
-            // Giáo viên thì chỉ xem đề thi của chính mình
-            return examRepository.findAllByTeacherEmail(currentUser.getEmail(), pageable);
-        }
+        return examRepository.findAllByTeacherEmail(currentUser.getEmail(), pageable);
     }
 
     @Override
