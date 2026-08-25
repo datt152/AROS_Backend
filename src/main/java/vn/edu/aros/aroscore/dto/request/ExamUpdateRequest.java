@@ -33,4 +33,6 @@ public class ExamUpdateRequest {
     private LocalDateTime startAt;
 
     private LocalDateTime endAt;
+
+    private ExamConfigRequest config;
 }

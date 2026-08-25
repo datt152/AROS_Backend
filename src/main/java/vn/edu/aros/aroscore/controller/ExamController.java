@@ -9,9 +9,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import vn.edu.aros.aroscore.dto.request.AssignExamClassroomsRequest;
 import vn.edu.aros.aroscore.dto.request.ExamCreateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamUpdateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamVersionCreateRequest;
+import vn.edu.aros.aroscore.dto.response.ClassroomResponse;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTakeResponse;
 import vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse;
@@ -36,6 +38,12 @@ public class ExamController {
 //    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<List<String>> generateExamVersions(@Valid @RequestBody ExamVersionCreateRequest request) {
         return ResponseEntity.ok(examService.generateExamVersions(request));
+    }
+
+    @GetMapping("/{examId}/versions")
+//    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<List<String>> listVersionCodes(@PathVariable Long examId) {
+        return ResponseEntity.ok(examService.listVersionCodes(examId));
     }
 
     @GetMapping("/{examId}/versions/{versionCode}")
@@ -74,6 +82,20 @@ public class ExamController {
     public ResponseEntity<Void> deleteExam(@PathVariable Long id) {
         examService.deleteExam(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}/classrooms")
+//    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<ExamResponse> assignClassrooms(
+            @PathVariable Long id,
+            @Valid @RequestBody AssignExamClassroomsRequest request) {
+        return ResponseEntity.ok(examService.assignClassrooms(id, request));
+    }
+
+    @GetMapping("/{id}/classrooms")
+//    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<List<ClassroomResponse>> getAssignedClassrooms(@PathVariable Long id) {
+        return ResponseEntity.ok(examService.getAssignedClassrooms(id));
     }
 
     @GetMapping("/{id}/take")

@@ -12,5 +12,7 @@ public interface ExamMapper {
     @Mapping(source = "subject.subjectName", target = "subjectName")
     @Mapping(source = "teacher.email", target = "teacherEmail")
     @Mapping(target = "totalQuestions", expression = "java(exam.getExamQuestions() != null ? exam.getExamQuestions().size() : 0)")
+    @Mapping(target = "classroomIds", ignore = true)
+    @Mapping(target = "config", ignore = true)
     ExamResponse toResponse(Exam exam);
 }

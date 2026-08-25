@@ -8,7 +8,9 @@ import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(name = "exams")
@@ -64,6 +66,18 @@ public class Exam {
     @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ExamVersion> examVersions = new ArrayList<>();
+
+    @ManyToMany
+    @JoinTable(
+            name = "exam_classrooms",
+            joinColumns = @JoinColumn(name = "exam_id"),
+            inverseJoinColumns = @JoinColumn(name = "classroom_id")
+    )
+    @Builder.Default
+    private Set<Classroom> classrooms = new HashSet<>();
+
+    @OneToOne(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private ExamConfig config;
 
     @PrePersist
     protected void onCreate() {

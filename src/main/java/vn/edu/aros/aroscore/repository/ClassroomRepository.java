@@ -20,5 +20,20 @@ public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
 
     @Query("SELECT DISTINCT c FROM Classroom c LEFT JOIN FETCH c.students s LEFT JOIN FETCH s.account WHERE c.id = :id")
     Optional<Classroom> findByIdWithStudents(@Param("id") Long id);
+
+    @Query("SELECT c FROM Classroom c WHERE c.id IN :ids AND c.subject.id = :subjectId AND c.subject.lecturer.email = :email")
+    java.util.List<Classroom> findAllByIdsAndSubjectAndLecturer(
+            @Param("ids") java.util.Collection<Long> ids,
+            @Param("subjectId") Long subjectId,
+            @Param("email") String email);
+
+    @Query("""
+            SELECT CASE WHEN COUNT(c) > 0 THEN TRUE ELSE FALSE END
+            FROM Classroom c JOIN c.students s
+            WHERE c.id IN :classroomIds AND s.id = :studentId AND c.isActive = true
+            """)
+    boolean isStudentInAnyClassroom(
+            @Param("classroomIds") java.util.Collection<Long> classroomIds,
+            @Param("studentId") Long studentId);
 }
 

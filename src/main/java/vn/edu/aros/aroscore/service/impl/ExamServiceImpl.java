@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.edu.aros.aroscore.dto.matrix.AnswerMapping;
 import vn.edu.aros.aroscore.dto.matrix.QuestionMatrix;
+import vn.edu.aros.aroscore.dto.request.AssignExamClassroomsRequest;
+import vn.edu.aros.aroscore.dto.request.ExamConfigRequest;
 import vn.edu.aros.aroscore.dto.request.ExamCreateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamUpdateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamVersionCreateRequest;
@@ -19,6 +21,7 @@ import vn.edu.aros.aroscore.dto.response.*;
 import vn.edu.aros.aroscore.entity.*;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
+import vn.edu.aros.aroscore.entity.enums.ExamType;
 import vn.edu.aros.aroscore.entity.enums.QuestionType;
 import vn.edu.aros.aroscore.mapper.ExamMapper;
 import vn.edu.aros.aroscore.repository.*;
@@ -27,7 +30,9 @@ import vn.edu.aros.aroscore.service.ExamService;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,6 +48,7 @@ public class ExamServiceImpl implements ExamService {
     private final ExamMapper examMapper;
     private final ExamVersionRepository examVersionRepository;
     private final SubmissionRepository submissionRepository;
+    private final ClassroomRepository classroomRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private String getCurrentUserEmail() {
@@ -52,6 +58,107 @@ public class ExamServiceImpl implements ExamService {
     private Exam getOwnedExam(Long examId) {
         return examRepository.findByIdAndTeacherEmail(examId, getCurrentUserEmail())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đề thi hoặc bạn không có quyền!"));
+    }
+
+    private ExamResponse toFullResponse(Exam exam) {
+        ExamResponse response = examMapper.toResponse(exam);
+        if (exam.getClassrooms() != null) {
+            response.setClassroomIds(exam.getClassrooms().stream()
+                    .map(Classroom::getId)
+                    .toList());
+        } else {
+            response.setClassroomIds(List.of());
+        }
+        if (exam.getConfig() != null) {
+            response.setConfig(toConfigResponse(exam.getConfig()));
+        }
+        return response;
+    }
+
+    private ExamConfigResponse toConfigResponse(ExamConfig config) {
+        return ExamConfigResponse.builder()
+                .id(config.getId())
+                .semester(config.getSemester())
+                .academicYear(config.getAcademicYear())
+                .totalQuestions(config.getTotalQuestions())
+                .examType(config.getExamType())
+                .shuffleQuestions(config.getShuffleQuestions())
+                .shuffleAnswers(config.getShuffleAnswers())
+                .paperCount(config.getPaperCount())
+                .allowEdit(config.getAllowEdit())
+                .build();
+    }
+
+    private ExamType toExamType(ExamMode mode) {
+        return mode == ExamMode.OMR_PAPER ? ExamType.OMR : ExamType.ONLINE;
+    }
+
+    private ExamConfig buildDefaultConfig(Exam exam, ExamConfigRequest request, int questionCount) {
+        ExamConfig config = ExamConfig.builder()
+                .exam(exam)
+                .totalQuestions(questionCount)
+                .examType(toExamType(exam.getExamMode()))
+                .shuffleQuestions(true)
+                .shuffleAnswers(true)
+                .paperCount(1)
+                .allowEdit(true)
+                .build();
+        applyConfigRequest(config, request, questionCount, exam.getExamMode());
+        return config;
+    }
+
+    private void applyConfigRequest(ExamConfig config, ExamConfigRequest request, int questionCount, ExamMode mode) {
+        config.setTotalQuestions(questionCount);
+        config.setExamType(toExamType(mode));
+        if (request == null) {
+            return;
+        }
+        if (request.getSemester() != null) {
+            config.setSemester(request.getSemester());
+        }
+        if (request.getAcademicYear() != null) {
+            config.setAcademicYear(request.getAcademicYear());
+        }
+        if (request.getShuffleQuestions() != null) {
+            config.setShuffleQuestions(request.getShuffleQuestions());
+        }
+        if (request.getShuffleAnswers() != null) {
+            config.setShuffleAnswers(request.getShuffleAnswers());
+        }
+        if (request.getPaperCount() != null) {
+            config.setPaperCount(request.getPaperCount());
+        }
+        if (request.getAllowEdit() != null) {
+            config.setAllowEdit(request.getAllowEdit());
+        }
+    }
+
+    private Set<Classroom> resolveClassrooms(List<Long> classroomIds, Long subjectId, String email) {
+        if (classroomIds == null || classroomIds.isEmpty()) {
+            return new HashSet<>();
+        }
+        List<Classroom> classrooms = classroomRepository.findAllByIdsAndSubjectAndLecturer(
+                classroomIds, subjectId, email);
+        if (classrooms.size() != classroomIds.stream().distinct().count()) {
+            throw new RuntimeException("Một số lớp không tồn tại, không thuộc môn này, hoặc bạn không có quyền!");
+        }
+        for (Classroom classroom : classrooms) {
+            if (Boolean.FALSE.equals(classroom.getIsActive())) {
+                throw new RuntimeException("Lớp \"" + classroom.getClassName() + "\" đã ngừng hoạt động!");
+            }
+        }
+        return new HashSet<>(classrooms);
+    }
+
+    private void assertCanPublish(Exam exam, ExamStatus newStatus) {
+        if (newStatus == ExamStatus.ONGOING || newStatus == ExamStatus.UPCOMING) {
+            if (exam.getClassrooms() == null || exam.getClassrooms().isEmpty()) {
+                throw new RuntimeException("Phải giao đề cho ít nhất 1 lớp trước khi mở bài thi!");
+            }
+            if (examVersionRepository.findByExamId(exam.getId()).isEmpty()) {
+                throw new RuntimeException("Phải sinh mã đề trước khi mở bài thi!");
+            }
+        }
     }
 
     private void assertExamOpenForTaking(Exam exam) {
@@ -68,6 +175,18 @@ public class ExamServiceImpl implements ExamService {
         }
         if (exam.getEndAt() != null && now.isAfter(exam.getEndAt())) {
             throw new RuntimeException("Bài thi đã hết hạn!");
+        }
+    }
+
+    private void assertStudentCanTake(Exam exam, User student) {
+        if (exam.getClassrooms() == null || exam.getClassrooms().isEmpty()) {
+            throw new RuntimeException("Đề thi chưa được giao cho lớp nào!");
+        }
+        Set<Long> classroomIds = exam.getClassrooms().stream()
+                .map(Classroom::getId)
+                .collect(Collectors.toSet());
+        if (!classroomRepository.isStudentInAnyClassroom(classroomIds, student.getId())) {
+            throw new RuntimeException("Bạn không thuộc lớp được giao đề thi này!");
         }
     }
 
@@ -106,6 +225,7 @@ public class ExamServiceImpl implements ExamService {
                 .teacher(teacher)
                 .maxScore(request.getMaxScore())
                 .status(ExamStatus.DRAFT)
+                .classrooms(resolveClassrooms(request.getClassroomIds(), subject.getId(), email))
                 .build();
 
         int order = 1;
@@ -124,7 +244,10 @@ public class ExamServiceImpl implements ExamService {
             order++;
         }
 
-        return examMapper.toResponse(examRepository.save(exam));
+        ExamConfig config = buildDefaultConfig(exam, request.getConfig(), request.getQuestionIds().size());
+        exam.setConfig(config);
+
+        return toFullResponse(examRepository.save(exam));
     }
 
     @Override
@@ -136,6 +259,10 @@ public class ExamServiceImpl implements ExamService {
             throw new RuntimeException("Đề thi chưa có câu hỏi, không thể sinh mã đề!");
         }
 
+        ExamConfig config = exam.getConfig();
+        boolean shuffleQuestions = config == null || !Boolean.FALSE.equals(config.getShuffleQuestions());
+        boolean shuffleAnswers = config == null || !Boolean.FALSE.equals(config.getShuffleAnswers());
+
         List<String> finalCodes = new ArrayList<>();
         if (request.getManualVersionCodes() != null && !request.getManualVersionCodes().isEmpty()) {
             finalCodes.addAll(request.getManualVersionCodes());
@@ -143,6 +270,11 @@ public class ExamServiceImpl implements ExamService {
             int existingCount = examVersionRepository.findByExamId(exam.getId()).size();
             for (int i = 1; i <= request.getAutoGenerateCount(); i++) {
                 finalCodes.add(String.format("%03d", existingCount + i));
+            }
+        } else if (config != null && config.getPaperCount() != null && config.getPaperCount() > 0
+                && examVersionRepository.findByExamId(exam.getId()).isEmpty()) {
+            for (int i = 1; i <= config.getPaperCount(); i++) {
+                finalCodes.add(String.format("%03d", i));
             }
         } else {
             throw new RuntimeException("Bạn phải cung cấp danh sách mã đề hoặc số lượng đề cần tự sinh!");
@@ -165,25 +297,30 @@ public class ExamServiceImpl implements ExamService {
 
         List<ExamVersion> savedVersions = new ArrayList<>();
         for (String code : finalCodes) {
-            List<ExamQuestion> shuffledQuestions = new ArrayList<>(exam.getExamQuestions());
-            java.util.Collections.shuffle(shuffledQuestions);
+            List<ExamQuestion> orderedQuestions = new ArrayList<>(exam.getExamQuestions());
+            orderedQuestions.sort(Comparator.comparingInt(ExamQuestion::getQuestionOrder));
+            if (shuffleQuestions) {
+                java.util.Collections.shuffle(orderedQuestions);
+            }
 
             List<QuestionMatrix> matrixList = new ArrayList<>();
             int newQuestionOrder = 1;
 
-            for (ExamQuestion eq : shuffledQuestions) {
+            for (ExamQuestion eq : orderedQuestions) {
                 Question q = eq.getQuestion();
-                List<AnswerOption> shuffledOptions = new ArrayList<>(q.getOptions());
-                java.util.Collections.shuffle(shuffledOptions);
+                List<AnswerOption> options = new ArrayList<>(q.getOptions());
+                if (shuffleAnswers) {
+                    java.util.Collections.shuffle(options);
+                }
 
-                if (shuffledOptions.size() > LABELS.length) {
+                if (options.size() > LABELS.length) {
                     throw new RuntimeException("Câu hỏi ID " + q.getId() + " có quá nhiều đáp án (tối đa "
                             + LABELS.length + ")!");
                 }
 
                 List<AnswerMapping> answerMappings = new ArrayList<>();
-                for (int i = 0; i < shuffledOptions.size(); i++) {
-                    AnswerOption opt = shuffledOptions.get(i);
+                for (int i = 0; i < options.size(); i++) {
+                    AnswerOption opt = options.get(i);
                     answerMappings.add(new AnswerMapping(opt.getId(), LABELS[i], opt.getIsCorrect()));
                 }
 
@@ -264,14 +401,14 @@ public class ExamServiceImpl implements ExamService {
     @Override
     @Transactional(readOnly = true)
     public Page<ExamResponse> getAllExams(Pageable pageable) {
-        String email = getCurrentUserEmail();
-        return examRepository.findAllByTeacherEmail(email, pageable).map(examMapper::toResponse);
+        return examRepository.findAllByTeacherEmail(getCurrentUserEmail(), pageable)
+                .map(this::toFullResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
     public ExamResponse getExamById(Long id) {
-        return examMapper.toResponse(getOwnedExam(id));
+        return toFullResponse(getOwnedExam(id));
     }
 
     @Override
@@ -279,6 +416,11 @@ public class ExamServiceImpl implements ExamService {
     public ExamResponse updateExam(Long id, ExamUpdateRequest request) {
         String email = getCurrentUserEmail();
         Exam exam = getOwnedExam(id);
+
+        if (exam.getConfig() != null && Boolean.FALSE.equals(exam.getConfig().getAllowEdit())
+                && submissionRepository.existsByExamAndSubmitTimeIsNotNull(exam)) {
+            throw new RuntimeException("Đề thi không cho phép chỉnh sửa sau khi đã có bài nộp!");
+        }
 
         exam.setTitle(request.getTitle());
         exam.setDuration(request.getDuration());
@@ -288,6 +430,7 @@ public class ExamServiceImpl implements ExamService {
         exam.setEndAt(request.getEndAt());
 
         if (request.getStatus() != null) {
+            assertCanPublish(exam, request.getStatus());
             exam.setStatus(request.getStatus());
         }
 
@@ -307,7 +450,14 @@ public class ExamServiceImpl implements ExamService {
             throw new RuntimeException("Thời gian kết thúc phải sau thời gian bắt đầu!");
         }
 
-        return examMapper.toResponse(examRepository.save(exam));
+        int questionCount = exam.getExamQuestions() != null ? exam.getExamQuestions().size() : 0;
+        if (exam.getConfig() == null) {
+            exam.setConfig(buildDefaultConfig(exam, request.getConfig(), questionCount));
+        } else {
+            applyConfigRequest(exam.getConfig(), request.getConfig(), questionCount, exam.getExamMode());
+        }
+
+        return toFullResponse(examRepository.save(exam));
     }
 
     @Override
@@ -325,6 +475,48 @@ public class ExamServiceImpl implements ExamService {
 
     @Override
     @Transactional
+    public ExamResponse assignClassrooms(Long examId, AssignExamClassroomsRequest request) {
+        String email = getCurrentUserEmail();
+        Exam exam = getOwnedExam(examId);
+        Set<Classroom> classrooms = resolveClassrooms(
+                request.getClassroomIds(), exam.getSubject().getId(), email);
+        exam.setClassrooms(classrooms);
+        return toFullResponse(examRepository.save(exam));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ClassroomResponse> getAssignedClassrooms(Long examId) {
+        Exam exam = getOwnedExam(examId);
+        if (exam.getClassrooms() == null || exam.getClassrooms().isEmpty()) {
+            return List.of();
+        }
+        return exam.getClassrooms().stream()
+                .map(c -> ClassroomResponse.builder()
+                        .id(c.getId())
+                        .className(c.getClassName())
+                        .description(c.getDescription())
+                        .semester(c.getSemester())
+                        .academicYear(c.getAcademicYear())
+                        .isActive(c.getIsActive())
+                        .subjectId(c.getSubject().getId())
+                        .subjectName(c.getSubject().getSubjectName())
+                        .build())
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> listVersionCodes(Long examId) {
+        getOwnedExam(examId);
+        return examVersionRepository.findByExamId(examId).stream()
+                .map(ExamVersion::getVersionCode)
+                .sorted()
+                .toList();
+    }
+
+    @Override
+    @Transactional
     @SneakyThrows
     public ExamTakeResponse takeExam(Long examId) {
         Exam exam = examRepository.findById(examId)
@@ -334,6 +526,8 @@ public class ExamServiceImpl implements ExamService {
 
         User student = userRepository.findByEmail(getCurrentUserEmail())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin học sinh"));
+
+        assertStudentCanTake(exam, student);
 
         if (submissionRepository.existsByExamAndStudentAndSubmitTimeIsNotNull(exam, student)) {
             throw new RuntimeException("Bạn đã nộp bài thi này rồi!");
@@ -362,7 +556,6 @@ public class ExamServiceImpl implements ExamService {
             submissionRepository.save(draft);
         }
 
-        // Kiểm tra hết giờ theo duration từ lúc start
         if (draft.getStartTime() != null) {
             LocalDateTime deadline = draft.getStartTime().plusMinutes(exam.getDuration());
             if (LocalDateTime.now().isAfter(deadline)) {

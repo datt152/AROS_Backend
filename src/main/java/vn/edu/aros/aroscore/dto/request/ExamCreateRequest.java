@@ -34,4 +34,9 @@ public class ExamCreateRequest {
     // Key: ID câu hỏi, Value: Điểm thô (Ví dụ câu khó cho 2 điểm thô).
     // Nếu Frontend không gửi trường này, Backend tự hiểu mọi câu đều là 1 điểm thô.
     private java.util.Map<Long, Double> rawPoints;
+
+    /** Giao đề cho các lớp ngay khi tạo (optional). */
+    private List<Long> classroomIds;
+
+    private ExamConfigRequest config;
 }

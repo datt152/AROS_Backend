@@ -5,6 +5,7 @@ import vn.edu.aros.aroscore.entity.enums.ExamMode;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class ExamResponse {
@@ -21,4 +22,6 @@ public class ExamResponse {
     private LocalDateTime endAt;
     private Integer totalQuestions;
     private Double maxScore;
+    private List<Long> classroomIds;
+    private ExamConfigResponse config;
 }
