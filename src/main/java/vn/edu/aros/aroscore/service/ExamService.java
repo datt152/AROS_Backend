@@ -22,7 +22,7 @@ public interface ExamService {
 
     ExamVersionDetailResponse getExamVersionDetail(Long examId, String versionCode) throws JsonProcessingException;
 
-    Page<ExamResponse> getAllExams(Pageable pageable);
+    Page<ExamResponse> getAllExams(Long classroomId, Pageable pageable);
 
     ExamResponse getExamById(Long id);
 

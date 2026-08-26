@@ -400,8 +400,18 @@ public class ExamServiceImpl implements ExamService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ExamResponse> getAllExams(Pageable pageable) {
-        return examRepository.findAllByTeacherEmail(getCurrentUserEmail(), pageable)
+    public Page<ExamResponse> getAllExams(Long classroomId, Pageable pageable) {
+        String email = getCurrentUserEmail();
+
+        if (classroomId != null) {
+            if (!classroomRepository.existsByIdAndLecturerEmail(classroomId, email)) {
+                throw new RuntimeException("Không tìm thấy lớp học hoặc bạn không có quyền truy cập!");
+            }
+            return examRepository.findAllByClassroomIdAndTeacherEmail(classroomId, email, pageable)
+                    .map(this::toFullResponse);
+        }
+
+        return examRepository.findAllByTeacherEmail(email, pageable)
                 .map(this::toFullResponse);
     }
 

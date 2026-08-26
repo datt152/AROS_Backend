@@ -57,10 +57,11 @@ public class ExamController {
     @GetMapping
 //    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Page<ExamResponse>> getAllExams(
+            @RequestParam(required = false) Long classroomId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(examService.getAllExams(pageable));
+        return ResponseEntity.ok(examService.getAllExams(classroomId, pageable));
     }
 
     @GetMapping("/{id}")

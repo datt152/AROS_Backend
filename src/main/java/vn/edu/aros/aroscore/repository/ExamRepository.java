@@ -18,4 +18,14 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
 
     @Query("SELECT e FROM Exam e WHERE e.id = :id AND e.teacher.email = :email")
     Optional<Exam> findByIdAndTeacherEmail(@Param("id") Long id, @Param("email") String email);
+
+    @Query("""
+            SELECT DISTINCT e FROM Exam e
+            JOIN e.classrooms c
+            WHERE c.id = :classroomId AND e.teacher.email = :email
+            """)
+    Page<Exam> findAllByClassroomIdAndTeacherEmail(
+            @Param("classroomId") Long classroomId,
+            @Param("email") String email,
+            Pageable pageable);
 }

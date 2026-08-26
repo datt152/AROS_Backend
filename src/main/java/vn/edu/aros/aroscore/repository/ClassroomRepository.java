@@ -35,5 +35,14 @@ public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
     boolean isStudentInAnyClassroom(
             @Param("classroomIds") java.util.Collection<Long> classroomIds,
             @Param("studentId") Long studentId);
+
+    @Query("""
+            SELECT CASE WHEN COUNT(c) > 0 THEN TRUE ELSE FALSE END
+            FROM Classroom c
+            WHERE c.id = :classroomId AND c.subject.lecturer.email = :email
+            """)
+    boolean existsByIdAndLecturerEmail(
+            @Param("classroomId") Long classroomId,
+            @Param("email") String email);
 }
 
