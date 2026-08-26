@@ -18,6 +18,10 @@ import java.util.List;
 public class QuestionResponse {
     private Long subjectId;
 
+    private Long topicId;
+
+    private String topicName;
+
     private Long questionId;
 
     private String content;

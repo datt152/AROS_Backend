@@ -35,6 +35,11 @@ public class Question {
     @JoinColumn(name = "subject_id", nullable = false)
     private Subject subject;
 
+    /** Chủ đề / chương trong môn (optional để tương thích câu hỏi cũ). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "topic_id")
+    private Topic topic;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "teacher_id", nullable = false)
     private User teacher;

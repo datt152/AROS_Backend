@@ -12,12 +12,15 @@ public interface QuestionMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "subject", ignore = true)
+    @Mapping(target = "topic", ignore = true)
     @Mapping(target = "teacher", ignore = true)
     @Mapping(target = "options", ignore = true)
     @Mapping(target = "isActive", ignore = true)
     Question toEntity(QuestionRequest request);
 
     @Mapping(source = "subject.id", target = "subjectId")
+    @Mapping(source = "topic.id", target = "topicId")
+    @Mapping(source = "topic.name", target = "topicName")
     @Mapping(source = "id", target = "questionId")
     QuestionResponse toResponse(Question question);
 }

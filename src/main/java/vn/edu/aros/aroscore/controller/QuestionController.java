@@ -28,9 +28,10 @@ public class QuestionController {
 //    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Page<QuestionResponse>> getAllQuestions(
             @RequestParam(required = false) Long subjectId,
+            @RequestParam(required = false) Long topicId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(questionService.getAllQuestions(subjectId, page, size));
+        return ResponseEntity.ok(questionService.getAllQuestions(subjectId, topicId, page, size));
     }
     @PutMapping("/{id}")
 //    @PreAuthorize("hasRole('TEACHER')")

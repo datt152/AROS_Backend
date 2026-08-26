@@ -14,6 +14,9 @@ public class QuestionRequest {
     @NotNull(message = "ID Môn học không được rỗng")
     private Long subjectId;
 
+    /** Chủ đề / chương (khuyến nghị; optional cho câu hỏi cũ). */
+    private Long topicId;
+
     @NotBlank(message = "Nội dung câu hỏi không được rỗng")
     private String content;
 

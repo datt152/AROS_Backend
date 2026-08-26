@@ -19,6 +19,21 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("SELECT q FROM Question q WHERE q.subject.id = :subjectId AND q.teacher.email = :email AND q.isActive = true")
     Page<Question> findAllBySubjectIdAndTeacherEmail(@Param("subjectId") Long subjectId, @Param("email") String email, Pageable pageable);
 
+    @Query("""
+            SELECT q FROM Question q
+            WHERE q.topic.id = :topicId AND q.teacher.email = :email AND q.isActive = true
+            """)
+    Page<Question> findAllByTopicIdAndTeacherEmail(
+            @Param("topicId") Long topicId,
+            @Param("email") String email,
+            Pageable pageable);
+
+    @Query("""
+            SELECT COUNT(q) FROM Question q
+            WHERE q.topic.id = :topicId AND q.isActive = true
+            """)
+    long countActiveByTopicId(@Param("topicId") Long topicId);
+
     @Query("SELECT q FROM Question q WHERE q.id = :id AND q.teacher.email = :email AND q.isActive = true")
     Optional<Question> findActiveByIdAndTeacherEmail(@Param("id") Long id, @Param("email") String email);
 
