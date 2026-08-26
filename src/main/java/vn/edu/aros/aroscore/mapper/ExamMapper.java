@@ -14,5 +14,6 @@ public interface ExamMapper {
     @Mapping(target = "totalQuestions", expression = "java(exam.getExamQuestions() != null ? exam.getExamQuestions().size() : 0)")
     @Mapping(target = "classroomIds", ignore = true)
     @Mapping(target = "config", ignore = true)
+    @Mapping(target = "sourceTemplateId", ignore = true)
     ExamResponse toResponse(Exam exam);
 }

@@ -77,6 +77,9 @@ public class ExamServiceImpl implements ExamService {
         if (exam.getConfig() != null) {
             response.setConfig(toConfigResponse(exam.getConfig()));
         }
+        if (exam.getSourceTemplate() != null) {
+            response.setSourceTemplateId(exam.getSourceTemplate().getId());
+        }
         return response;
     }
 

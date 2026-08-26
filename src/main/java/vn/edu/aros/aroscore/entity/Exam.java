@@ -86,6 +86,11 @@ public class Exam {
     @OneToOne(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private ExamConfig config;
 
+    /** Đề được tạo từ template nào (optional). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "template_id")
+    private ExamTemplate sourceTemplate;
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();

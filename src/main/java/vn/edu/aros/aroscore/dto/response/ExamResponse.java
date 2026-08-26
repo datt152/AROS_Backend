@@ -26,4 +26,5 @@ public class ExamResponse {
     private Double maxScore;
     private List<Long> classroomIds;
     private ExamConfigResponse config;
+    private Long sourceTemplateId;
 }

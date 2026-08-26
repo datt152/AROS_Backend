@@ -18,9 +18,11 @@ import vn.edu.aros.aroscore.dto.response.ExamGradingResponse;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamStatsResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTakeResponse;
+import vn.edu.aros.aroscore.dto.response.ExamTemplateResponse;
 import vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.service.ExamService;
+import vn.edu.aros.aroscore.service.ExamTemplateService;
 
 import java.util.List;
 
@@ -30,6 +32,7 @@ import java.util.List;
 public class ExamController {
 
     private final ExamService examService;
+    private final ExamTemplateService examTemplateService;
 
     @PostMapping
 //    @PreAuthorize("hasRole('TEACHER')")
@@ -87,6 +90,12 @@ public class ExamController {
     public ResponseEntity<Void> deleteExam(@PathVariable Long id) {
         examService.deleteExam(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/save-as-template")
+//    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<ExamTemplateResponse> saveExamAsTemplate(@PathVariable Long id) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(examTemplateService.saveExamAsTemplate(id));
     }
 
     @PutMapping("/{id}/classrooms")
