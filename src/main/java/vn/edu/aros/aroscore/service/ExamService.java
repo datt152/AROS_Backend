@@ -9,6 +9,7 @@ import vn.edu.aros.aroscore.dto.request.ExamCreateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamUpdateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamVersionCreateRequest;
 import vn.edu.aros.aroscore.dto.response.ClassroomResponse;
+import vn.edu.aros.aroscore.dto.response.ExamGradingResponse;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTakeResponse;
 import vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse;
@@ -40,4 +41,6 @@ public interface ExamService {
     List<ClassroomResponse> getAssignedClassrooms(Long examId);
 
     List<String> listVersionCodes(Long examId);
+
+    ExamGradingResponse getExamGrading(Long examId, Long classroomId);
 }

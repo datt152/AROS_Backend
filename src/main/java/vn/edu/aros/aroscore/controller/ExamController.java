@@ -14,6 +14,7 @@ import vn.edu.aros.aroscore.dto.request.ExamCreateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamUpdateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamVersionCreateRequest;
 import vn.edu.aros.aroscore.dto.response.ClassroomResponse;
+import vn.edu.aros.aroscore.dto.response.ExamGradingResponse;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTakeResponse;
 import vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse;
@@ -97,6 +98,14 @@ public class ExamController {
 //    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<List<ClassroomResponse>> getAssignedClassrooms(@PathVariable Long id) {
         return ResponseEntity.ok(examService.getAssignedClassrooms(id));
+    }
+
+    @GetMapping("/{id}/grading")
+//    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<ExamGradingResponse> getExamGrading(
+            @PathVariable Long id,
+            @RequestParam Long classroomId) {
+        return ResponseEntity.ok(examService.getExamGrading(id, classroomId));
     }
 
     @GetMapping("/{id}/take")

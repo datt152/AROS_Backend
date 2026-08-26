@@ -22,6 +22,7 @@ import vn.edu.aros.aroscore.entity.*;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 import vn.edu.aros.aroscore.entity.enums.ExamType;
+import vn.edu.aros.aroscore.entity.enums.GradingStatus;
 import vn.edu.aros.aroscore.entity.enums.QuestionType;
 import vn.edu.aros.aroscore.mapper.ExamMapper;
 import vn.edu.aros.aroscore.repository.*;
@@ -29,9 +30,12 @@ import vn.edu.aros.aroscore.service.ExamService;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -413,6 +417,93 @@ public class ExamServiceImpl implements ExamService {
 
         return examRepository.findAllByTeacherEmail(email, pageable)
                 .map(this::toFullResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ExamGradingResponse getExamGrading(Long examId, Long classroomId) {
+        String email = getCurrentUserEmail();
+        Exam exam = getOwnedExam(examId);
+
+        if (!classroomRepository.existsByIdAndLecturerEmail(classroomId, email)) {
+            throw new RuntimeException("Không tìm thấy lớp học hoặc bạn không có quyền truy cập!");
+        }
+
+        boolean assigned = exam.getClassrooms() != null
+                && exam.getClassrooms().stream().anyMatch(c -> c.getId().equals(classroomId));
+        if (!assigned) {
+            throw new RuntimeException("Đề thi chưa được giao cho lớp này!");
+        }
+
+        Classroom classroom = classroomRepository.findByIdWithStudents(classroomId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy lớp học!"));
+
+        Map<Long, Submission> byStudentId = new HashMap<>();
+        for (Submission submission : submissionRepository.findAllByExamIdWithStudent(examId)) {
+            byStudentId.put(submission.getStudent().getId(), submission);
+        }
+
+        List<User> students = classroom.getStudents() == null
+                ? Collections.emptyList()
+                : classroom.getStudents().stream()
+                .sorted(Comparator
+                        .comparing(User::getFullName, Comparator.nullsLast(String::compareToIgnoreCase))
+                        .thenComparing(User::getStudentCode, Comparator.nullsLast(String::compareToIgnoreCase)))
+                .toList();
+
+        List<ExamGradingStudentResponse> rows = students.stream()
+                .map(student -> toGradingStudentRow(student, byStudentId.get(student.getId()), exam.getDuration()))
+                .toList();
+
+        return ExamGradingResponse.builder()
+                .examId(exam.getId())
+                .examTitle(exam.getTitle())
+                .classroomId(classroom.getId())
+                .classroomName(classroom.getClassName())
+                .maxScore(exam.getMaxScore())
+                .students(rows)
+                .build();
+    }
+
+    private ExamGradingStudentResponse toGradingStudentRow(User student, Submission submission, Integer durationMinutes) {
+        if (submission == null) {
+            return ExamGradingStudentResponse.builder()
+                    .studentId(student.getId())
+                    .fullName(student.getFullName())
+                    .email(student.getEmail())
+                    .studentCode(student.getStudentCode())
+                    .status(GradingStatus.NOT_STARTED)
+                    .build();
+        }
+
+        GradingStatus status;
+        if (submission.getSubmitTime() != null) {
+            status = GradingStatus.SUBMITTED;
+        } else if (isPastExamDuration(submission.getStartTime(), durationMinutes)) {
+            status = GradingStatus.EXPIRED;
+        } else {
+            status = GradingStatus.IN_PROGRESS;
+        }
+
+        return ExamGradingStudentResponse.builder()
+                .studentId(student.getId())
+                .fullName(student.getFullName())
+                .email(student.getEmail())
+                .studentCode(student.getStudentCode())
+                .status(status)
+                .submissionId(submission.getId())
+                .score(submission.getScore())
+                .versionCode(submission.getVersionCode())
+                .startTime(submission.getStartTime())
+                .submitTime(submission.getSubmitTime())
+                .build();
+    }
+
+    private boolean isPastExamDuration(LocalDateTime startTime, Integer durationMinutes) {
+        if (startTime == null || durationMinutes == null) {
+            return false;
+        }
+        return LocalDateTime.now().isAfter(startTime.plusMinutes(durationMinutes));
     }
 
     @Override

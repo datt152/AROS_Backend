@@ -1,6 +1,8 @@
 package vn.edu.aros.aroscore.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import vn.edu.aros.aroscore.entity.Exam;
 import vn.edu.aros.aroscore.entity.Submission;
@@ -21,6 +23,9 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     long countByExamAndSubmitTimeIsNotNull(Exam exam);
 
     List<Submission> findByExam(Exam exam);
+
+    @Query("SELECT s FROM Submission s JOIN FETCH s.student WHERE s.exam.id = :examId")
+    List<Submission> findAllByExamIdWithStudent(@Param("examId") Long examId);
 
     void deleteByExam(Exam exam);
 }
