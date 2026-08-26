@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
+import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 
 import java.time.LocalDateTime;
@@ -34,6 +35,12 @@ public class Exam {
     @Enumerated(EnumType.STRING)
     @Column(name = "exam_mode", nullable = false)
     private ExamMode examMode;
+
+    /** EXAM = kỳ thi chính thức; PRACTICE = bài luyện tập. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "purpose", nullable = false, length = 20)
+    @Builder.Default
+    private ExamPurpose purpose = ExamPurpose.EXAM;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
@@ -84,6 +91,9 @@ public class Exam {
         this.createdAt = LocalDateTime.now();
         if (this.status == null) {
             this.status = ExamStatus.DRAFT;
+        }
+        if (this.purpose == null) {
+            this.purpose = ExamPurpose.EXAM;
         }
     }
 

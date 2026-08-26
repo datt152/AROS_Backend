@@ -20,4 +20,7 @@ public class ExamConfigResponse {
     private Boolean shuffleAnswers;
     private Integer paperCount;
     private Boolean allowEdit;
+    private Boolean showScoreToStudent;
+    private Integer maxAttempts;
+    private Boolean timeLimitEnabled;
 }

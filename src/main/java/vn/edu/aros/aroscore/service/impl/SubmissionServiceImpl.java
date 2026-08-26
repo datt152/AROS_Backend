@@ -14,6 +14,7 @@ import vn.edu.aros.aroscore.dto.response.SubmissionDetailItemResponse;
 import vn.edu.aros.aroscore.dto.response.SubmissionDetailResponse;
 import vn.edu.aros.aroscore.dto.response.SubmissionResponse;
 import vn.edu.aros.aroscore.entity.*;
+import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 import vn.edu.aros.aroscore.entity.enums.GradingStatus;
 import vn.edu.aros.aroscore.repository.ExamRepository;
@@ -60,22 +61,22 @@ public class SubmissionServiceImpl implements SubmissionService {
         User student = userRepository.findByEmail(getCurrentUserEmail())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin học sinh"));
 
-        Submission submission = submissionRepository.findByExamAndStudent(exam, student)
+        Submission submission = submissionRepository.findByExamAndStudentAndSubmitTimeIsNull(exam, student)
                 .orElseThrow(() -> new RuntimeException(
                         "Bạn chưa bắt đầu bài thi. Hãy gọi API take trước khi nộp bài!"));
-
-        if (submission.getSubmitTime() != null) {
-            throw new RuntimeException("Bạn đã nộp bài thi này rồi, không thể nộp lại!");
-        }
 
         if (!request.getVersionCode().equals(submission.getVersionCode())) {
             throw new RuntimeException("Mã đề nộp không khớp với mã đề đã được gán khi bắt đầu làm bài!");
         }
 
-        if (submission.getStartTime() != null) {
+        ExamConfig config = exam.getConfig();
+        boolean timeLimitEnabled = config == null
+                ? exam.getPurpose() != ExamPurpose.PRACTICE
+                : !Boolean.FALSE.equals(config.getTimeLimitEnabled());
+
+        if (timeLimitEnabled && submission.getStartTime() != null) {
             LocalDateTime deadline = submission.getStartTime().plusMinutes(exam.getDuration());
             if (LocalDateTime.now().isAfter(deadline.plusMinutes(1))) {
-                // Cho phép trễ tối đa 1 phút (latency mạng)
                 throw new RuntimeException("Đã hết thời gian làm bài, không thể nộp!");
             }
         }
@@ -147,12 +148,16 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         submissionRepository.save(submission);
 
+        boolean scoreVisible = config == null || !Boolean.FALSE.equals(config.getShowScoreToStudent());
+
         return SubmissionResponse.builder()
                 .submissionId(submission.getId())
-                .totalScore(finalScore)
-                .maxScore(exam.getMaxScore())
-                .correctQuestions(correctCount)
+                .attemptNo(submission.getAttemptNo())
+                .totalScore(scoreVisible ? finalScore : null)
+                .maxScore(scoreVisible ? exam.getMaxScore() : null)
+                .correctQuestions(scoreVisible ? correctCount : null)
                 .totalQuestions(matrixList.size())
+                .scoreVisible(scoreVisible)
                 .build();
     }
 
@@ -169,7 +174,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         }
 
         User student = submission.getStudent();
-        GradingStatus status = resolveGradingStatus(submission, exam.getDuration());
+        GradingStatus status = resolveGradingStatus(submission, exam);
 
         Map<Long, Double> rawPointsByQuestionId = exam.getExamQuestions() == null
                 ? Collections.emptyMap()
@@ -250,12 +255,18 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .build();
     }
 
-    private GradingStatus resolveGradingStatus(Submission submission, Integer durationMinutes) {
+    private GradingStatus resolveGradingStatus(Submission submission, Exam exam) {
         if (submission.getSubmitTime() != null) {
             return GradingStatus.SUBMITTED;
         }
-        if (submission.getStartTime() != null && durationMinutes != null
-                && LocalDateTime.now().isAfter(submission.getStartTime().plusMinutes(durationMinutes))) {
+        ExamConfig config = exam.getConfig();
+        boolean timeLimitEnabled = config == null
+                ? exam.getPurpose() != ExamPurpose.PRACTICE
+                : !Boolean.FALSE.equals(config.getTimeLimitEnabled());
+        if (timeLimitEnabled
+                && submission.getStartTime() != null
+                && exam.getDuration() != null
+                && LocalDateTime.now().isAfter(submission.getStartTime().plusMinutes(exam.getDuration()))) {
             return GradingStatus.EXPIRED;
         }
         return GradingStatus.IN_PROGRESS;

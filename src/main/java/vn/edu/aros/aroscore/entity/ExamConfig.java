@@ -47,4 +47,24 @@ public class ExamConfig {
 
     @Column(name = "allow_edit")
     private Boolean allowEdit = true;
+
+    /** Hiện điểm cho SV sau khi nộp (đặc biệt hữu ích với PRACTICE). */
+    @Column(name = "show_score_to_student")
+    @Builder.Default
+    private Boolean showScoreToStudent = true;
+
+    /**
+     * Số lần làm tối đa (chỉ PRACTICE thực sự dùng).
+     * null = không giới hạn với PRACTICE; EXAM luôn coi như 1 lần.
+     */
+    @Column(name = "max_attempts")
+    private Integer maxAttempts;
+
+    /**
+     * true = áp dụng Exam.duration khi take/submit.
+     * false = không giới hạn thời gian làm bài (thường dùng PRACTICE).
+     */
+    @Column(name = "time_limit_enabled")
+    @Builder.Default
+    private Boolean timeLimitEnabled = true;
 }

@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
+import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 
 import java.time.LocalDateTime;
@@ -21,6 +22,8 @@ public class ExamUpdateRequest {
 
     @NotNull(message = "Hình thức thi không được để trống")
     private ExamMode examMode;
+
+    private ExamPurpose purpose;
 
     @NotNull(message = "Môn học không được để trống")
     private Long subjectId;

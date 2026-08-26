@@ -20,6 +20,7 @@ import vn.edu.aros.aroscore.dto.request.ExamVersionCreateRequest;
 import vn.edu.aros.aroscore.dto.response.*;
 import vn.edu.aros.aroscore.entity.*;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
+import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 import vn.edu.aros.aroscore.entity.enums.ExamType;
 import vn.edu.aros.aroscore.entity.enums.GradingStatus;
@@ -90,6 +91,9 @@ public class ExamServiceImpl implements ExamService {
                 .shuffleAnswers(config.getShuffleAnswers())
                 .paperCount(config.getPaperCount())
                 .allowEdit(config.getAllowEdit())
+                .showScoreToStudent(config.getShowScoreToStudent())
+                .maxAttempts(config.getMaxAttempts())
+                .timeLimitEnabled(config.getTimeLimitEnabled())
                 .build();
     }
 
@@ -98,6 +102,7 @@ public class ExamServiceImpl implements ExamService {
     }
 
     private ExamConfig buildDefaultConfig(Exam exam, ExamConfigRequest request, int questionCount) {
+        boolean practice = exam.getPurpose() == ExamPurpose.PRACTICE;
         ExamConfig config = ExamConfig.builder()
                 .exam(exam)
                 .totalQuestions(questionCount)
@@ -106,6 +111,9 @@ public class ExamServiceImpl implements ExamService {
                 .shuffleAnswers(true)
                 .paperCount(1)
                 .allowEdit(true)
+                .showScoreToStudent(true)
+                .maxAttempts(practice ? null : 1)
+                .timeLimitEnabled(!practice)
                 .build();
         applyConfigRequest(config, request, questionCount, exam.getExamMode());
         return config;
@@ -135,6 +143,37 @@ public class ExamServiceImpl implements ExamService {
         if (request.getAllowEdit() != null) {
             config.setAllowEdit(request.getAllowEdit());
         }
+        if (request.getShowScoreToStudent() != null) {
+            config.setShowScoreToStudent(request.getShowScoreToStudent());
+        }
+        if (request.getMaxAttempts() != null) {
+            if (request.getMaxAttempts() < 1) {
+                throw new RuntimeException("Số lần làm bài phải >= 1!");
+            }
+            config.setMaxAttempts(request.getMaxAttempts());
+        }
+        if (request.getTimeLimitEnabled() != null) {
+            config.setTimeLimitEnabled(request.getTimeLimitEnabled());
+        }
+    }
+
+    private boolean isTimeLimitEnabled(Exam exam) {
+        ExamConfig config = exam.getConfig();
+        if (config == null || config.getTimeLimitEnabled() == null) {
+            return exam.getPurpose() != ExamPurpose.PRACTICE;
+        }
+        return Boolean.TRUE.equals(config.getTimeLimitEnabled());
+    }
+
+    private Integer effectiveMaxAttempts(Exam exam) {
+        if (exam.getPurpose() != ExamPurpose.PRACTICE) {
+            return 1;
+        }
+        ExamConfig config = exam.getConfig();
+        if (config == null) {
+            return null;
+        }
+        return config.getMaxAttempts();
     }
 
     private Set<Classroom> resolveClassrooms(List<Long> classroomIds, Long subjectId, String email) {
@@ -225,6 +264,7 @@ public class ExamServiceImpl implements ExamService {
                 .title(request.getTitle())
                 .duration(request.getDuration())
                 .examMode(request.getExamMode())
+                .purpose(request.getPurpose() != null ? request.getPurpose() : ExamPurpose.EXAM)
                 .subject(subject)
                 .teacher(teacher)
                 .maxScore(request.getMaxScore())
@@ -404,17 +444,26 @@ public class ExamServiceImpl implements ExamService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ExamResponse> getAllExams(Long classroomId, Pageable pageable) {
+    public Page<ExamResponse> getAllExams(Long classroomId, ExamPurpose purpose, Pageable pageable) {
         String email = getCurrentUserEmail();
 
         if (classroomId != null) {
             if (!classroomRepository.existsByIdAndLecturerEmail(classroomId, email)) {
                 throw new RuntimeException("Không tìm thấy lớp học hoặc bạn không có quyền truy cập!");
             }
+            if (purpose != null) {
+                return examRepository.findAllByClassroomIdAndTeacherEmailAndPurpose(
+                                classroomId, email, purpose, pageable)
+                        .map(this::toFullResponse);
+            }
             return examRepository.findAllByClassroomIdAndTeacherEmail(classroomId, email, pageable)
                     .map(this::toFullResponse);
         }
 
+        if (purpose != null) {
+            return examRepository.findAllByTeacherEmailAndPurpose(email, purpose, pageable)
+                    .map(this::toFullResponse);
+        }
         return examRepository.findAllByTeacherEmail(email, pageable)
                 .map(this::toFullResponse);
     }
@@ -440,7 +489,7 @@ public class ExamServiceImpl implements ExamService {
 
         Map<Long, Submission> byStudentId = new HashMap<>();
         for (Submission submission : submissionRepository.findAllByExamIdWithStudent(examId)) {
-            byStudentId.put(submission.getStudent().getId(), submission);
+            putPreferredSubmission(byStudentId, submission);
         }
 
         List<User> students = classroom.getStudents() == null
@@ -451,8 +500,10 @@ public class ExamServiceImpl implements ExamService {
                         .thenComparing(User::getStudentCode, Comparator.nullsLast(String::compareToIgnoreCase)))
                 .toList();
 
+        boolean timeLimited = isTimeLimitEnabled(exam);
         List<ExamGradingStudentResponse> rows = students.stream()
-                .map(student -> toGradingStudentRow(student, byStudentId.get(student.getId()), exam.getDuration()))
+                .map(student -> toGradingStudentRow(
+                        student, byStudentId.get(student.getId()), exam.getDuration(), timeLimited))
                 .toList();
 
         return ExamGradingResponse.builder()
@@ -465,7 +516,8 @@ public class ExamServiceImpl implements ExamService {
                 .build();
     }
 
-    private ExamGradingStudentResponse toGradingStudentRow(User student, Submission submission, Integer durationMinutes) {
+    private ExamGradingStudentResponse toGradingStudentRow(
+            User student, Submission submission, Integer durationMinutes, boolean timeLimitEnabled) {
         if (submission == null) {
             return ExamGradingStudentResponse.builder()
                     .studentId(student.getId())
@@ -479,7 +531,7 @@ public class ExamServiceImpl implements ExamService {
         GradingStatus status;
         if (submission.getSubmitTime() != null) {
             status = GradingStatus.SUBMITTED;
-        } else if (isPastExamDuration(submission.getStartTime(), durationMinutes)) {
+        } else if (timeLimitEnabled && isPastExamDuration(submission.getStartTime(), durationMinutes)) {
             status = GradingStatus.EXPIRED;
         } else {
             status = GradingStatus.IN_PROGRESS;
@@ -497,6 +549,26 @@ public class ExamServiceImpl implements ExamService {
                 .startTime(submission.getStartTime())
                 .submitTime(submission.getSubmitTime())
                 .build();
+    }
+
+    private void putPreferredSubmission(Map<Long, Submission> byStudentId, Submission submission) {
+        Long studentId = submission.getStudent().getId();
+        Submission existing = byStudentId.get(studentId);
+        if (existing == null || preferSubmission(submission, existing)) {
+            byStudentId.put(studentId, submission);
+        }
+    }
+
+    /** Ưu tiên bài đã nộp mới nhất; nếu cùng loại thì attemptNo cao hơn. */
+    private boolean preferSubmission(Submission candidate, Submission current) {
+        boolean candidateSubmitted = candidate.getSubmitTime() != null;
+        boolean currentSubmitted = current.getSubmitTime() != null;
+        if (candidateSubmitted != currentSubmitted) {
+            return candidateSubmitted;
+        }
+        int candidateAttempt = candidate.getAttemptNo() != null ? candidate.getAttemptNo() : 1;
+        int currentAttempt = current.getAttemptNo() != null ? current.getAttemptNo() : 1;
+        return candidateAttempt >= currentAttempt;
     }
 
     private boolean isPastExamDuration(LocalDateTime startTime, Integer durationMinutes) {
@@ -548,7 +620,7 @@ public class ExamServiceImpl implements ExamService {
 
         Map<Long, Submission> byStudentId = new HashMap<>();
         for (Submission submission : submissionRepository.findAllByExamIdWithStudent(examId)) {
-            byStudentId.put(submission.getStudent().getId(), submission);
+            putPreferredSubmission(byStudentId, submission);
         }
 
         int submitted = 0;
@@ -556,6 +628,7 @@ public class ExamServiceImpl implements ExamService {
         int expired = 0;
         int notStarted = 0;
         List<Double> scores = new ArrayList<>();
+        boolean timeLimited = isTimeLimitEnabled(exam);
 
         for (Long studentId : scopedStudentIds) {
             Submission submission = byStudentId.get(studentId);
@@ -568,7 +641,7 @@ public class ExamServiceImpl implements ExamService {
                 if (submission.getScore() != null) {
                     scores.add(submission.getScore());
                 }
-            } else if (isPastExamDuration(submission.getStartTime(), exam.getDuration())) {
+            } else if (timeLimited && isPastExamDuration(submission.getStartTime(), exam.getDuration())) {
                 expired++;
             } else {
                 inProgress++;
@@ -724,6 +797,9 @@ public class ExamServiceImpl implements ExamService {
         exam.setTitle(request.getTitle());
         exam.setDuration(request.getDuration());
         exam.setExamMode(request.getExamMode());
+        if (request.getPurpose() != null) {
+            exam.setPurpose(request.getPurpose());
+        }
         exam.setMaxScore(request.getMaxScore());
         exam.setStartAt(request.getStartAt());
         exam.setEndAt(request.getEndAt());
@@ -828,16 +904,13 @@ public class ExamServiceImpl implements ExamService {
 
         assertStudentCanTake(exam, student);
 
-        if (submissionRepository.existsByExamAndStudentAndSubmitTimeIsNotNull(exam, student)) {
-            throw new RuntimeException("Bạn đã nộp bài thi này rồi!");
-        }
-
         List<ExamVersion> versions = examVersionRepository.findByExamId(examId);
         if (versions.isEmpty()) {
             throw new RuntimeException("Bài thi chưa được tạo mã đề!");
         }
 
-        Submission draft = submissionRepository.findByExamAndStudent(exam, student).orElse(null);
+        Submission draft = submissionRepository.findByExamAndStudentAndSubmitTimeIsNull(exam, student)
+                .orElse(null);
         ExamVersion assignedVersion;
 
         if (draft != null && draft.getVersionCode() != null) {
@@ -845,17 +918,27 @@ public class ExamServiceImpl implements ExamService {
                     .findByExamIdAndVersionCode(examId, draft.getVersionCode())
                     .orElseThrow(() -> new RuntimeException("Mã đề đã gán không còn tồn tại!"));
         } else {
+            long submittedCount = submissionRepository.countByExamAndStudentAndSubmitTimeIsNotNull(exam, student);
+            Integer maxAttempts = effectiveMaxAttempts(exam);
+            if (maxAttempts != null && submittedCount >= maxAttempts) {
+                throw new RuntimeException(exam.getPurpose() == ExamPurpose.PRACTICE
+                        ? "Bạn đã hết số lần làm bài luyện tập!"
+                        : "Bạn đã nộp bài thi này rồi!");
+            }
+
             assignedVersion = versions.get(new java.util.Random().nextInt(versions.size()));
+            int nextAttempt = submissionRepository.findMaxAttemptNo(exam, student) + 1;
             draft = Submission.builder()
                     .exam(exam)
                     .student(student)
+                    .attemptNo(nextAttempt)
                     .versionCode(assignedVersion.getVersionCode())
                     .startTime(LocalDateTime.now())
                     .build();
             submissionRepository.save(draft);
         }
 
-        if (draft.getStartTime() != null) {
+        if (isTimeLimitEnabled(exam) && draft.getStartTime() != null) {
             LocalDateTime deadline = draft.getStartTime().plusMinutes(exam.getDuration());
             if (LocalDateTime.now().isAfter(deadline)) {
                 throw new RuntimeException("Đã hết thời gian làm bài!");
@@ -898,10 +981,16 @@ public class ExamServiceImpl implements ExamService {
                     .build());
         }
 
+        ExamConfig config = exam.getConfig();
         return ExamTakeResponse.builder()
                 .examId(exam.getId())
                 .title(exam.getTitle())
+                .purpose(exam.getPurpose())
                 .duration(exam.getDuration())
+                .timeLimitEnabled(isTimeLimitEnabled(exam))
+                .showScoreToStudent(config == null || !Boolean.FALSE.equals(config.getShowScoreToStudent()))
+                .attemptNo(draft.getAttemptNo())
+                .maxAttempts(effectiveMaxAttempts(exam))
                 .versionCode(assignedVersion.getVersionCode())
                 .startTime(draft.getStartTime())
                 .questions(questionDTOs)

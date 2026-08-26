@@ -14,15 +14,20 @@ import java.util.Optional;
 @Repository
 public interface SubmissionRepository extends JpaRepository<Submission, Long> {
 
-    Optional<Submission> findByExamAndStudent(Exam exam, User student);
+    Optional<Submission> findByExamAndStudentAndSubmitTimeIsNull(Exam exam, User student);
 
     boolean existsByExamAndStudentAndSubmitTimeIsNotNull(Exam exam, User student);
+
+    long countByExamAndStudentAndSubmitTimeIsNotNull(Exam exam, User student);
 
     boolean existsByExamAndSubmitTimeIsNotNull(Exam exam);
 
     long countByExamAndSubmitTimeIsNotNull(Exam exam);
 
     List<Submission> findByExam(Exam exam);
+
+    @Query("SELECT COALESCE(MAX(s.attemptNo), 0) FROM Submission s WHERE s.exam = :exam AND s.student = :student")
+    int findMaxAttemptNo(@Param("exam") Exam exam, @Param("student") User student);
 
     @Query("SELECT s FROM Submission s JOIN FETCH s.student WHERE s.exam.id = :examId")
     List<Submission> findAllByExamIdWithStudent(@Param("examId") Long examId);

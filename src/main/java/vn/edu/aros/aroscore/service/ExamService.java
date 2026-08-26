@@ -14,6 +14,7 @@ import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamStatsResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTakeResponse;
 import vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse;
+import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 
 import java.util.List;
 
@@ -24,7 +25,7 @@ public interface ExamService {
 
     ExamVersionDetailResponse getExamVersionDetail(Long examId, String versionCode) throws JsonProcessingException;
 
-    Page<ExamResponse> getAllExams(Long classroomId, Pageable pageable);
+    Page<ExamResponse> getAllExams(Long classroomId, ExamPurpose purpose, Pageable pageable);
 
     ExamResponse getExamById(Long id);
 

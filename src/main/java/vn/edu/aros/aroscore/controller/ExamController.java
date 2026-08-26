@@ -19,6 +19,7 @@ import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamStatsResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTakeResponse;
 import vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse;
+import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.service.ExamService;
 
 import java.util.List;
@@ -60,10 +61,11 @@ public class ExamController {
 //    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Page<ExamResponse>> getAllExams(
             @RequestParam(required = false) Long classroomId,
+            @RequestParam(required = false) ExamPurpose purpose,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(examService.getAllExams(classroomId, pageable));
+        return ResponseEntity.ok(examService.getAllExams(classroomId, purpose, pageable));
     }
 
     @GetMapping("/{id}")

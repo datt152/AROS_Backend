@@ -7,8 +7,10 @@ import lombok.Data;
 @Builder
 public class SubmissionResponse {
     private Long submissionId;
-    private Double totalScore;        // Điểm thực tế đạt được
-    private Double maxScore;          // Thang điểm chuẩn
-    private Integer correctQuestions; // Số câu đúng
-    private Integer totalQuestions;   // Tổng số câu
+    private Integer attemptNo;
+    private Double totalScore;
+    private Double maxScore;
+    private Integer correctQuestions;
+    private Integer totalQuestions;
+    private Boolean scoreVisible;
 }
