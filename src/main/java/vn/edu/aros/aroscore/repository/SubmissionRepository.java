@@ -27,5 +27,14 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     @Query("SELECT s FROM Submission s JOIN FETCH s.student WHERE s.exam.id = :examId")
     List<Submission> findAllByExamIdWithStudent(@Param("examId") Long examId);
 
+    @Query("""
+            SELECT s FROM Submission s
+            JOIN FETCH s.student
+            JOIN FETCH s.exam e
+            JOIN FETCH e.teacher
+            WHERE s.id = :id
+            """)
+    Optional<Submission> findByIdWithStudentAndExam(@Param("id") Long id);
+
     void deleteByExam(Exam exam);
 }
