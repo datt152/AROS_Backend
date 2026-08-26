@@ -36,5 +36,14 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
             """)
     Optional<Submission> findByIdWithStudentAndExam(@Param("id") Long id);
 
+    @Query("""
+            SELECT DISTINCT s FROM Submission s
+            JOIN FETCH s.student
+            LEFT JOIN FETCH s.details d
+            LEFT JOIN FETCH d.question
+            WHERE s.exam.id = :examId AND s.submitTime IS NOT NULL
+            """)
+    List<Submission> findSubmittedWithDetailsByExamId(@Param("examId") Long examId);
+
     void deleteByExam(Exam exam);
 }

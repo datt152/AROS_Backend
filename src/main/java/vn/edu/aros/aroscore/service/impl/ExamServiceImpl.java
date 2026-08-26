@@ -508,6 +508,204 @@ public class ExamServiceImpl implements ExamService {
 
     @Override
     @Transactional(readOnly = true)
+    public ExamStatsResponse getExamStats(Long examId, Long classroomId) {
+        String email = getCurrentUserEmail();
+        Exam exam = getOwnedExam(examId);
+
+        Long responseClassroomId = null;
+        String responseClassroomName = null;
+        Set<Long> scopedStudentIds = new HashSet<>();
+
+        if (classroomId != null) {
+            if (!classroomRepository.existsByIdAndLecturerEmail(classroomId, email)) {
+                throw new RuntimeException("Không tìm thấy lớp học hoặc bạn không có quyền truy cập!");
+            }
+            boolean assigned = exam.getClassrooms() != null
+                    && exam.getClassrooms().stream().anyMatch(c -> c.getId().equals(classroomId));
+            if (!assigned) {
+                throw new RuntimeException("Đề thi chưa được giao cho lớp này!");
+            }
+
+            Classroom classroom = classroomRepository.findByIdWithStudents(classroomId)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy lớp học!"));
+            responseClassroomId = classroom.getId();
+            responseClassroomName = classroom.getClassName();
+            if (classroom.getStudents() != null) {
+                classroom.getStudents().forEach(s -> scopedStudentIds.add(s.getId()));
+            }
+        } else {
+            Set<Long> classroomIds = exam.getClassrooms() == null
+                    ? Collections.emptySet()
+                    : exam.getClassrooms().stream().map(Classroom::getId).collect(Collectors.toSet());
+            if (!classroomIds.isEmpty()) {
+                for (Classroom classroom : classroomRepository.findAllByIdInWithStudents(classroomIds)) {
+                    if (classroom.getStudents() != null) {
+                        classroom.getStudents().forEach(s -> scopedStudentIds.add(s.getId()));
+                    }
+                }
+            }
+        }
+
+        Map<Long, Submission> byStudentId = new HashMap<>();
+        for (Submission submission : submissionRepository.findAllByExamIdWithStudent(examId)) {
+            byStudentId.put(submission.getStudent().getId(), submission);
+        }
+
+        int submitted = 0;
+        int inProgress = 0;
+        int expired = 0;
+        int notStarted = 0;
+        List<Double> scores = new ArrayList<>();
+
+        for (Long studentId : scopedStudentIds) {
+            Submission submission = byStudentId.get(studentId);
+            if (submission == null) {
+                notStarted++;
+                continue;
+            }
+            if (submission.getSubmitTime() != null) {
+                submitted++;
+                if (submission.getScore() != null) {
+                    scores.add(submission.getScore());
+                }
+            } else if (isPastExamDuration(submission.getStartTime(), exam.getDuration())) {
+                expired++;
+            } else {
+                inProgress++;
+            }
+        }
+
+        Double average = null;
+        Double highest = null;
+        Double lowest = null;
+        if (!scores.isEmpty()) {
+            average = scores.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+            highest = scores.stream().mapToDouble(Double::doubleValue).max().orElse(0);
+            lowest = scores.stream().mapToDouble(Double::doubleValue).min().orElse(0);
+            average = Math.round(average * 100.0) / 100.0;
+        }
+
+        List<ScoreBucketResponse> distribution = buildScoreDistribution(scores);
+        List<QuestionStatsResponse> questionStats = buildQuestionStats(exam, scopedStudentIds);
+
+        return ExamStatsResponse.builder()
+                .examId(exam.getId())
+                .examTitle(exam.getTitle())
+                .maxScore(exam.getMaxScore())
+                .classroomId(responseClassroomId)
+                .classroomName(responseClassroomName)
+                .totalStudents(scopedStudentIds.size())
+                .submittedCount(submitted)
+                .inProgressCount(inProgress)
+                .expiredCount(expired)
+                .notStartedCount(notStarted)
+                .averageScore(average)
+                .highestScore(highest)
+                .lowestScore(lowest)
+                .scoreDistribution(distribution)
+                .questionStats(questionStats)
+                .build();
+    }
+
+    private List<ScoreBucketResponse> buildScoreDistribution(List<Double> scores) {
+        int[] counts = new int[10];
+        for (Double score : scores) {
+            if (score == null) {
+                continue;
+            }
+            int bucket;
+            if (score >= 10.0) {
+                bucket = 9;
+            } else if (score < 0) {
+                bucket = 0;
+            } else {
+                bucket = (int) Math.floor(score);
+                if (bucket > 9) {
+                    bucket = 9;
+                }
+            }
+            counts[bucket]++;
+        }
+
+        List<ScoreBucketResponse> buckets = new ArrayList<>(10);
+        for (int i = 0; i < 10; i++) {
+            double from = i;
+            double to = i + 1.0;
+            buckets.add(ScoreBucketResponse.builder()
+                    .label(((int) from) + "–" + ((int) to))
+                    .minInclusive(from)
+                    .maxExclusive(i == 9 ? 10.0001 : to)
+                    .count(counts[i])
+                    .build());
+        }
+        return buckets;
+    }
+
+    private double round2(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
+    private List<QuestionStatsResponse> buildQuestionStats(Exam exam, Set<Long> scopedStudentIds) {
+        List<ExamQuestion> examQuestions = exam.getExamQuestions() == null
+                ? Collections.emptyList()
+                : exam.getExamQuestions().stream()
+                .sorted(Comparator.comparing(ExamQuestion::getQuestionOrder, Comparator.nullsLast(Integer::compareTo)))
+                .toList();
+
+        List<Submission> submitted = submissionRepository.findSubmittedWithDetailsByExamId(exam.getId());
+        if (!scopedStudentIds.isEmpty()) {
+            submitted = submitted.stream()
+                    .filter(s -> scopedStudentIds.contains(s.getStudent().getId()))
+                    .toList();
+        } else {
+            submitted = Collections.emptyList();
+        }
+
+        Map<Long, int[]> counters = new HashMap<>();
+        for (ExamQuestion eq : examQuestions) {
+            counters.put(eq.getQuestion().getId(), new int[]{0, 0});
+        }
+
+        for (Submission submission : submitted) {
+            if (submission.getDetails() == null) {
+                continue;
+            }
+            for (SubmissionDetail detail : submission.getDetails()) {
+                Long questionId = detail.getQuestion().getId();
+                int[] counter = counters.get(questionId);
+                if (counter == null) {
+                    continue;
+                }
+                counter[0]++;
+                if (Boolean.TRUE.equals(detail.getIsCorrect())) {
+                    counter[1]++;
+                }
+            }
+        }
+
+        List<QuestionStatsResponse> result = new ArrayList<>();
+        for (ExamQuestion eq : examQuestions) {
+            Long questionId = eq.getQuestion().getId();
+            int[] counter = counters.getOrDefault(questionId, new int[]{0, 0});
+            int answered = counter[0];
+            int correct = counter[1];
+            Double rate = answered == 0 ? null : round2((double) correct / answered);
+
+            result.add(QuestionStatsResponse.builder()
+                    .questionId(questionId)
+                    .order(eq.getQuestionOrder())
+                    .content(eq.getQuestion().getContent())
+                    .rawPoint(eq.getRawPoint())
+                    .answeredCount(answered)
+                    .correctCount(correct)
+                    .correctRate(rate)
+                    .build());
+        }
+        return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public ExamResponse getExamById(Long id) {
         return toFullResponse(getOwnedExam(id));
     }
