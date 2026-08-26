@@ -13,7 +13,6 @@ import vn.edu.aros.aroscore.dto.request.ExamTemplateCreateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamTemplateUpdateRequest;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTemplateResponse;
-import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.service.ExamTemplateService;
 
 @RestController
@@ -34,11 +33,10 @@ public class ExamTemplateController {
 //    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Page<ExamTemplateResponse>> getTemplates(
             @RequestParam(required = false) Long subjectId,
-            @RequestParam(required = false) ExamPurpose purpose,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(examTemplateService.getTemplates(subjectId, purpose, pageable));
+        return ResponseEntity.ok(examTemplateService.getTemplates(subjectId, pageable));
     }
 
     @GetMapping("/{id}")

@@ -24,8 +24,10 @@ import vn.edu.aros.aroscore.repository.*;
 import vn.edu.aros.aroscore.service.ExamTemplateService;
 
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -59,23 +61,14 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         Subject subject = subjectRepository.findByIdAndLecturerEmail(request.getSubjectId(), email)
                 .orElseThrow(() -> new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền!"));
 
-        ExamPurpose purpose = request.getPurpose() != null ? request.getPurpose() : ExamPurpose.EXAM;
-        List<Question> questions = loadAndValidateQuestions(
-                request.getQuestionIds(), subject.getId(), request.getExamMode());
+        List<Question> questions = loadAndValidateQuestions(request.getQuestionIds(), subject.getId(), null);
 
         ExamTemplate template = ExamTemplate.builder()
                 .title(request.getTitle())
-                .duration(request.getDuration())
-                .examMode(request.getExamMode())
-                .purpose(purpose)
                 .subject(subject)
                 .teacher(teacher)
-                .maxScore(request.getMaxScore())
                 .isActive(true)
                 .build();
-
-        applyConfigDefaults(template, purpose);
-        applyConfigRequest(template, request.getConfig(), request.getExamMode());
 
         int order = 1;
         for (Long questionId : request.getQuestionIds()) {
@@ -103,16 +96,10 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
 
         ExamTemplate template = ExamTemplate.builder()
                 .title(exam.getTitle())
-                .duration(exam.getDuration())
-                .examMode(exam.getExamMode())
-                .purpose(exam.getPurpose() != null ? exam.getPurpose() : ExamPurpose.EXAM)
                 .subject(exam.getSubject())
                 .teacher(exam.getTeacher())
-                .maxScore(exam.getMaxScore())
                 .isActive(true)
                 .build();
-
-        copyConfigFromExam(template, exam);
 
         List<ExamQuestion> ordered = exam.getExamQuestions().stream()
                 .sorted(Comparator.comparing(ExamQuestion::getQuestionOrder, Comparator.nullsLast(Integer::compareTo)))
@@ -126,19 +113,11 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ExamTemplateResponse> getTemplates(Long subjectId, ExamPurpose purpose, Pageable pageable) {
+    public Page<ExamTemplateResponse> getTemplates(Long subjectId, Pageable pageable) {
         String email = getCurrentUserEmail();
-        Page<ExamTemplate> page;
-        if (subjectId != null && purpose != null) {
-            page = examTemplateRepository.findAllActiveByTeacherEmailAndSubjectIdAndPurpose(
-                    email, subjectId, purpose, pageable);
-        } else if (subjectId != null) {
-            page = examTemplateRepository.findAllActiveByTeacherEmailAndSubjectId(email, subjectId, pageable);
-        } else if (purpose != null) {
-            page = examTemplateRepository.findAllActiveByTeacherEmailAndPurpose(email, purpose, pageable);
-        } else {
-            page = examTemplateRepository.findAllActiveByTeacherEmail(email, pageable);
-        }
+        Page<ExamTemplate> page = subjectId != null
+                ? examTemplateRepository.findAllActiveByTeacherEmailAndSubjectId(email, subjectId, pageable)
+                : examTemplateRepository.findAllActiveByTeacherEmail(email, pageable);
         return page.map(this::toResponse);
     }
 
@@ -157,18 +136,10 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         Subject subject = subjectRepository.findByIdAndLecturerEmail(request.getSubjectId(), email)
                 .orElseThrow(() -> new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền!"));
 
-        List<Question> questions = loadAndValidateQuestions(
-                request.getQuestionIds(), subject.getId(), request.getExamMode());
+        List<Question> questions = loadAndValidateQuestions(request.getQuestionIds(), subject.getId(), null);
 
         template.setTitle(request.getTitle());
-        template.setDuration(request.getDuration());
-        template.setExamMode(request.getExamMode());
-        if (request.getPurpose() != null) {
-            template.setPurpose(request.getPurpose());
-        }
         template.setSubject(subject);
-        template.setMaxScore(request.getMaxScore());
-        applyConfigRequest(template, request.getConfig(), request.getExamMode());
 
         template.getTemplateQuestions().clear();
         int order = 1;
@@ -202,18 +173,26 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
             throw new RuntimeException("Template chưa có câu hỏi!");
         }
 
+        List<ExamTemplateQuestion> ordered = template.getTemplateQuestions().stream()
+                .sorted(Comparator.comparing(ExamTemplateQuestion::getQuestionOrder, Comparator.nullsLast(Integer::compareTo)))
+                .toList();
+
+        List<Long> questionIds = ordered.stream().map(tq -> tq.getQuestion().getId()).toList();
+        loadAndValidateQuestions(questionIds, template.getSubject().getId(), request.getExamMode());
+
+        ExamPurpose purpose = request.getPurpose() != null ? request.getPurpose() : ExamPurpose.EXAM;
         Set<Classroom> classrooms = resolveClassrooms(
                 request.getClassroomIds(), template.getSubject().getId(), email);
 
         Exam exam = Exam.builder()
                 .title(request.getTitle() != null && !request.getTitle().isBlank()
                         ? request.getTitle() : template.getTitle())
-                .duration(template.getDuration())
-                .examMode(template.getExamMode())
-                .purpose(template.getPurpose())
+                .duration(request.getDuration())
+                .examMode(request.getExamMode())
+                .purpose(purpose)
                 .subject(template.getSubject())
                 .teacher(template.getTeacher())
-                .maxScore(template.getMaxScore())
+                .maxScore(request.getMaxScore())
                 .status(ExamStatus.DRAFT)
                 .startAt(request.getStartAt())
                 .endAt(request.getEndAt())
@@ -221,35 +200,11 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
                 .sourceTemplate(template)
                 .build();
 
-        List<ExamTemplateQuestion> ordered = template.getTemplateQuestions().stream()
-                .sorted(Comparator.comparing(ExamTemplateQuestion::getQuestionOrder, Comparator.nullsLast(Integer::compareTo)))
-                .toList();
-
         for (ExamTemplateQuestion tq : ordered) {
-            Question q = tq.getQuestion();
-            if (Boolean.FALSE.equals(q.getIsActive())) {
-                throw new RuntimeException("Câu hỏi ID " + q.getId()
-                        + " đã bị xóa khỏi ngân hàng, không thể tạo đề từ template!");
-            }
-            exam.addQuestion(q, tq.getQuestionOrder(), tq.getRawPoint());
+            exam.addQuestion(tq.getQuestion(), tq.getQuestionOrder(), tq.getRawPoint());
         }
 
-        ExamConfig config = ExamConfig.builder()
-                .exam(exam)
-                .semester(template.getSemester())
-                .academicYear(template.getAcademicYear())
-                .totalQuestions(ordered.size())
-                .examType(template.getExamType() != null
-                        ? template.getExamType()
-                        : (template.getExamMode() == ExamMode.OMR_PAPER ? ExamType.OMR : ExamType.ONLINE))
-                .shuffleQuestions(template.getShuffleQuestions())
-                .shuffleAnswers(template.getShuffleAnswers())
-                .paperCount(template.getPaperCount())
-                .allowEdit(template.getAllowEdit())
-                .showScoreToStudent(template.getShowScoreToStudent())
-                .maxAttempts(template.getMaxAttempts())
-                .timeLimitEnabled(template.getTimeLimitEnabled())
-                .build();
+        ExamConfig config = buildDefaultConfig(exam, request.getConfig(), ordered.size());
         exam.setConfig(config);
 
         // Luôn DRAFT: GV sinh mã đề rồi mới mở thi (giống flow tạo đề thường).
@@ -268,8 +223,7 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
             throw new RuntimeException("Thời gian kết thúc phải sau thời gian bắt đầu!");
         }
 
-        Exam saved = examRepository.save(exam);
-        return toExamResponse(saved);
+        return toExamResponse(examRepository.save(exam));
     }
 
     private List<Question> loadAndValidateQuestions(List<Long> questionIds, Long subjectId, ExamMode mode) {
@@ -308,105 +262,93 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         return new HashSet<>(classrooms);
     }
 
-    private void applyConfigDefaults(ExamTemplate template, ExamPurpose purpose) {
-        boolean practice = purpose == ExamPurpose.PRACTICE;
-        template.setShuffleQuestions(true);
-        template.setShuffleAnswers(true);
-        template.setPaperCount(1);
-        template.setAllowEdit(true);
-        template.setShowScoreToStudent(true);
-        template.setMaxAttempts(practice ? null : 1);
-        template.setTimeLimitEnabled(!practice);
-        template.setExamType(template.getExamMode() == ExamMode.OMR_PAPER ? ExamType.OMR : ExamType.ONLINE);
+    private ExamType toExamType(ExamMode mode) {
+        return mode == ExamMode.OMR_PAPER ? ExamType.OMR : ExamType.ONLINE;
     }
 
-    private void applyConfigRequest(ExamTemplate template, ExamConfigRequest request, ExamMode mode) {
-        template.setExamType(mode == ExamMode.OMR_PAPER ? ExamType.OMR : ExamType.ONLINE);
+    private ExamConfig buildDefaultConfig(Exam exam, ExamConfigRequest request, int questionCount) {
+        boolean practice = exam.getPurpose() == ExamPurpose.PRACTICE;
+        ExamConfig config = ExamConfig.builder()
+                .exam(exam)
+                .totalQuestions(questionCount)
+                .examType(toExamType(exam.getExamMode()))
+                .shuffleQuestions(true)
+                .shuffleAnswers(true)
+                .paperCount(1)
+                .allowEdit(true)
+                .showScoreToStudent(true)
+                .maxAttempts(practice ? null : 1)
+                .timeLimitEnabled(!practice)
+                .build();
+        applyConfigRequest(config, request, questionCount, exam.getExamMode());
+        return config;
+    }
+
+    private void applyConfigRequest(ExamConfig config, ExamConfigRequest request, int questionCount, ExamMode mode) {
+        config.setTotalQuestions(questionCount);
+        config.setExamType(toExamType(mode));
         if (request == null) {
             return;
         }
         if (request.getSemester() != null) {
-            template.setSemester(request.getSemester());
+            config.setSemester(request.getSemester());
         }
         if (request.getAcademicYear() != null) {
-            template.setAcademicYear(request.getAcademicYear());
+            config.setAcademicYear(request.getAcademicYear());
         }
         if (request.getShuffleQuestions() != null) {
-            template.setShuffleQuestions(request.getShuffleQuestions());
+            config.setShuffleQuestions(request.getShuffleQuestions());
         }
         if (request.getShuffleAnswers() != null) {
-            template.setShuffleAnswers(request.getShuffleAnswers());
+            config.setShuffleAnswers(request.getShuffleAnswers());
         }
         if (request.getPaperCount() != null) {
-            template.setPaperCount(request.getPaperCount());
+            config.setPaperCount(request.getPaperCount());
         }
         if (request.getAllowEdit() != null) {
-            template.setAllowEdit(request.getAllowEdit());
+            config.setAllowEdit(request.getAllowEdit());
         }
         if (request.getShowScoreToStudent() != null) {
-            template.setShowScoreToStudent(request.getShowScoreToStudent());
+            config.setShowScoreToStudent(request.getShowScoreToStudent());
         }
         if (request.getMaxAttempts() != null) {
             if (request.getMaxAttempts() < 1) {
                 throw new RuntimeException("Số lần làm bài phải >= 1!");
             }
-            template.setMaxAttempts(request.getMaxAttempts());
+            config.setMaxAttempts(request.getMaxAttempts());
         }
         if (request.getTimeLimitEnabled() != null) {
-            template.setTimeLimitEnabled(request.getTimeLimitEnabled());
+            config.setTimeLimitEnabled(request.getTimeLimitEnabled());
         }
-    }
-
-    private void copyConfigFromExam(ExamTemplate template, Exam exam) {
-        ExamConfig config = exam.getConfig();
-        if (config == null) {
-            applyConfigDefaults(template, exam.getPurpose());
-            return;
-        }
-        template.setSemester(config.getSemester());
-        template.setAcademicYear(config.getAcademicYear());
-        template.setExamType(config.getExamType());
-        template.setShuffleQuestions(config.getShuffleQuestions());
-        template.setShuffleAnswers(config.getShuffleAnswers());
-        template.setPaperCount(config.getPaperCount());
-        template.setAllowEdit(config.getAllowEdit());
-        template.setShowScoreToStudent(config.getShowScoreToStudent());
-        template.setMaxAttempts(config.getMaxAttempts());
-        template.setTimeLimitEnabled(config.getTimeLimitEnabled());
     }
 
     private ExamTemplateResponse toResponse(ExamTemplate template) {
-        List<Long> questionIds = template.getTemplateQuestions() == null
+        List<ExamTemplateQuestion> ordered = template.getTemplateQuestions() == null
                 ? List.of()
                 : template.getTemplateQuestions().stream()
                 .sorted(Comparator.comparing(ExamTemplateQuestion::getQuestionOrder, Comparator.nullsLast(Integer::compareTo)))
+                .toList();
+
+        List<Long> questionIds = ordered.stream()
                 .map(tq -> tq.getQuestion().getId())
                 .collect(Collectors.toList());
+
+        Map<Long, Double> rawPoints = new HashMap<>();
+        for (ExamTemplateQuestion tq : ordered) {
+            rawPoints.put(tq.getQuestion().getId(), tq.getRawPoint());
+        }
 
         return ExamTemplateResponse.builder()
                 .id(template.getId())
                 .title(template.getTitle())
-                .duration(template.getDuration())
-                .examMode(template.getExamMode())
-                .purpose(template.getPurpose())
                 .subjectId(template.getSubject().getId())
                 .subjectName(template.getSubject().getSubjectName())
                 .teacherEmail(template.getTeacher().getEmail())
-                .maxScore(template.getMaxScore())
                 .totalQuestions(questionIds.size())
                 .questionIds(questionIds)
+                .rawPoints(rawPoints)
                 .createdAt(template.getCreatedAt())
                 .isActive(template.getIsActive())
-                .semester(template.getSemester())
-                .academicYear(template.getAcademicYear())
-                .examType(template.getExamType())
-                .shuffleQuestions(template.getShuffleQuestions())
-                .shuffleAnswers(template.getShuffleAnswers())
-                .paperCount(template.getPaperCount())
-                .allowEdit(template.getAllowEdit())
-                .showScoreToStudent(template.getShowScoreToStudent())
-                .maxAttempts(template.getMaxAttempts())
-                .timeLimitEnabled(template.getTimeLimitEnabled())
                 .build();
     }
 

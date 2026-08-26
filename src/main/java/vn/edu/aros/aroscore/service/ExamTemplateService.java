@@ -7,7 +7,6 @@ import vn.edu.aros.aroscore.dto.request.ExamTemplateCreateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamTemplateUpdateRequest;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTemplateResponse;
-import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 
 public interface ExamTemplateService {
 
@@ -15,7 +14,7 @@ public interface ExamTemplateService {
 
     ExamTemplateResponse saveExamAsTemplate(Long examId);
 
-    Page<ExamTemplateResponse> getTemplates(Long subjectId, ExamPurpose purpose, Pageable pageable);
+    Page<ExamTemplateResponse> getTemplates(Long subjectId, Pageable pageable);
 
     ExamTemplateResponse getTemplateById(Long id);
 

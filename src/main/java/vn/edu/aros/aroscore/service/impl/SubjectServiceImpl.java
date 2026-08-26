@@ -68,7 +68,7 @@ public class SubjectServiceImpl implements SubjectService {
     @Override
     public Page<SubjectResponse> getAllSubjects(int page, int size) {
         String email = getCurrentUserEmail();
-
+        System.out.println("Email của người dùng hiện tại: " + email);
         Pageable pageable = PageRequest.of(page, size, Sort.by("subjectName").ascending());
 
         // Lọc danh sách môn học theo đúng giáo viên đang đăng nhập
