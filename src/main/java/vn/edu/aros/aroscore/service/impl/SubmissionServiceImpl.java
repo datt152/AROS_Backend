@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import vn.edu.aros.aroscore.dto.matrix.AnswerMapping;
 import vn.edu.aros.aroscore.dto.matrix.QuestionMatrix;
 import vn.edu.aros.aroscore.dto.request.SubmissionRequest;
+import vn.edu.aros.aroscore.dto.response.StudentSubmissionItemResponse;
 import vn.edu.aros.aroscore.dto.response.SubmissionDetailItemResponse;
 import vn.edu.aros.aroscore.dto.response.SubmissionDetailResponse;
 import vn.edu.aros.aroscore.dto.response.SubmissionResponse;
@@ -17,7 +18,6 @@ import vn.edu.aros.aroscore.entity.*;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 import vn.edu.aros.aroscore.entity.enums.GradingStatus;
-import vn.edu.aros.aroscore.repository.ExamRepository;
 import vn.edu.aros.aroscore.repository.ExamVersionRepository;
 import vn.edu.aros.aroscore.repository.SubmissionRepository;
 import vn.edu.aros.aroscore.repository.UserRepository;
@@ -36,7 +36,6 @@ import java.util.stream.Collectors;
 public class SubmissionServiceImpl implements SubmissionService {
 
     private final SubmissionRepository submissionRepository;
-    private final ExamRepository examRepository;
     private final ExamVersionRepository examVersionRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final UserRepository userRepository;
@@ -163,15 +162,38 @@ public class SubmissionServiceImpl implements SubmissionService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<StudentSubmissionItemResponse> getMySubmissions(Long examId) {
+        User student = userRepository.findByEmail(getCurrentUserEmail())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin học sinh!"));
+
+        List<Submission> submissions = submissionRepository
+                .findAllByStudentIdAndOptionalExamId(student.getId(), examId);
+
+        return submissions.stream()
+                .sorted(Comparator.comparing(Submission::getId).reversed())
+                .map(this::toStudentSubmissionItem)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     @SneakyThrows
     public SubmissionDetailResponse getSubmissionDetail(Long submissionId) {
-        Submission submission = submissionRepository.findByIdWithStudentAndExam(submissionId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy bài nộp!"));
+        Submission submission = submissionRepository.findByIdWithDetails(submissionId)
+                .orElseGet(() -> submissionRepository.findByIdWithStudentAndExam(submissionId)
+                        .orElseThrow(() -> new RuntimeException("Không tìm thấy bài nộp!")));
 
         Exam exam = submission.getExam();
-        if (!exam.getTeacher().getEmail().equals(getCurrentUserEmail())) {
+        String email = getCurrentUserEmail();
+        boolean isTeacher = exam.getTeacher().getEmail().equals(email);
+        boolean isOwner = submission.getStudent().getEmail().equals(email);
+        if (!isTeacher && !isOwner) {
             throw new RuntimeException("Bạn không có quyền xem bài nộp này!");
         }
+
+        boolean scoreVisible = isTeacher
+                || exam.getConfig() == null
+                || !Boolean.FALSE.equals(exam.getConfig().getShowScoreToStudent());
 
         User student = submission.getStudent();
         GradingStatus status = resolveGradingStatus(submission, exam);
@@ -203,36 +225,43 @@ public class SubmissionServiceImpl implements SubmissionService {
                 : submission.getDetails();
 
         Map<Long, QuestionMatrix> finalMatrixByQuestionId = matrixByQuestionId;
-        List<SubmissionDetailItemResponse> details = detailEntities.stream()
-                .map(detail -> {
-                    Question question = detail.getQuestion();
-                    QuestionMatrix matrix = finalMatrixByQuestionId.get(question.getId());
-                    Integer order = matrix != null ? matrix.getNewOrder() : null;
-                    String correctAnswer = matrix == null ? null : matrix.getAnswerMappings().stream()
-                            .filter(am -> Boolean.TRUE.equals(am.getIsCorrect()))
-                            .map(AnswerMapping::getNewLabel)
-                            .sorted()
-                            .collect(Collectors.joining(","));
+        List<SubmissionDetailItemResponse> details;
+        if (!scoreVisible && isOwner && !isTeacher) {
+            details = List.of();
+        } else {
+            details = detailEntities.stream()
+                    .map(detail -> {
+                        Question question = detail.getQuestion();
+                        QuestionMatrix matrix = finalMatrixByQuestionId.get(question.getId());
+                        Integer order = matrix != null ? matrix.getNewOrder() : null;
+                        String correctAnswer = matrix == null ? null : matrix.getAnswerMappings().stream()
+                                .filter(am -> Boolean.TRUE.equals(am.getIsCorrect()))
+                                .map(AnswerMapping::getNewLabel)
+                                .sorted()
+                                .collect(Collectors.joining(","));
 
-                    return SubmissionDetailItemResponse.builder()
-                            .questionId(question.getId())
-                            .order(order)
-                            .content(question.getContent())
-                            .type(question.getType())
-                            .selectedAnswer(detail.getSelectedAnswer())
-                            .correctAnswer(correctAnswer)
-                            .isCorrect(detail.getIsCorrect())
-                            .rawPoint(rawPointsByQuestionId.getOrDefault(question.getId(), 1.0))
-                            .build();
-                })
-                .sorted(Comparator.comparing(
-                        SubmissionDetailItemResponse::getOrder,
-                        Comparator.nullsLast(Integer::compareTo)))
-                .toList();
+                        return SubmissionDetailItemResponse.builder()
+                                .questionId(question.getId())
+                                .order(order)
+                                .content(question.getContent())
+                                .type(question.getType())
+                                .selectedAnswer(detail.getSelectedAnswer())
+                                .correctAnswer(scoreVisible ? correctAnswer : null)
+                                .isCorrect(scoreVisible ? detail.getIsCorrect() : null)
+                                .rawPoint(rawPointsByQuestionId.getOrDefault(question.getId(), 1.0))
+                                .build();
+                    })
+                    .sorted(Comparator.comparing(
+                            SubmissionDetailItemResponse::getOrder,
+                            Comparator.nullsLast(Integer::compareTo)))
+                    .toList();
+        }
 
-        int correctCount = (int) details.stream().filter(d -> Boolean.TRUE.equals(d.getIsCorrect())).count();
-        int totalQuestions = !details.isEmpty()
-                ? details.size()
+        int correctCount = (int) detailEntities.stream()
+                .filter(d -> Boolean.TRUE.equals(d.getIsCorrect()))
+                .count();
+        int totalQuestions = !detailEntities.isEmpty()
+                ? detailEntities.size()
                 : (exam.getExamQuestions() != null ? exam.getExamQuestions().size() : 0);
 
         return SubmissionDetailResponse.builder()
@@ -245,13 +274,35 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .email(student.getEmail())
                 .studentCode(student.getStudentCode())
                 .status(status)
-                .score(submission.getScore())
-                .maxScore(exam.getMaxScore())
-                .correctQuestions(correctCount)
+                .score(scoreVisible ? submission.getScore() : null)
+                .maxScore(scoreVisible ? exam.getMaxScore() : null)
+                .correctQuestions(scoreVisible ? correctCount : null)
                 .totalQuestions(totalQuestions)
                 .startTime(submission.getStartTime())
                 .submitTime(submission.getSubmitTime())
                 .details(details)
+                .build();
+    }
+
+    private StudentSubmissionItemResponse toStudentSubmissionItem(Submission submission) {
+        Exam exam = submission.getExam();
+        boolean scoreVisible = exam.getConfig() == null
+                || !Boolean.FALSE.equals(exam.getConfig().getShowScoreToStudent());
+        boolean submitted = submission.getSubmitTime() != null;
+
+        return StudentSubmissionItemResponse.builder()
+                .submissionId(submission.getId())
+                .examId(exam.getId())
+                .examTitle(exam.getTitle())
+                .purpose(exam.getPurpose())
+                .versionCode(submission.getVersionCode())
+                .attemptNo(submission.getAttemptNo())
+                .status(resolveGradingStatus(submission, exam))
+                .score(submitted && scoreVisible ? submission.getScore() : null)
+                .maxScore(scoreVisible ? exam.getMaxScore() : null)
+                .scoreVisible(scoreVisible)
+                .startTime(submission.getStartTime())
+                .submitTime(submission.getSubmitTime())
                 .build();
     }
 
