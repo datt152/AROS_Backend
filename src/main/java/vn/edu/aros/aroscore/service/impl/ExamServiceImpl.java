@@ -28,6 +28,7 @@ import vn.edu.aros.aroscore.entity.enums.QuestionType;
 import vn.edu.aros.aroscore.mapper.ExamMapper;
 import vn.edu.aros.aroscore.repository.*;
 import vn.edu.aros.aroscore.service.ExamService;
+import vn.edu.aros.aroscore.service.omr.OmrExamValidator;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -54,6 +55,7 @@ public class ExamServiceImpl implements ExamService {
     private final ExamVersionRepository examVersionRepository;
     private final SubmissionRepository submissionRepository;
     private final ClassroomRepository classroomRepository;
+    private final OmrExamValidator omrExamValidator;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private String getCurrentUserEmail() {
@@ -294,6 +296,7 @@ public class ExamServiceImpl implements ExamService {
         ExamConfig config = buildDefaultConfig(exam, request.getConfig(), request.getQuestionIds().size());
         exam.setConfig(config);
 
+        omrExamValidator.validateOmrExam(exam);
         return toFullResponse(examRepository.save(exam));
     }
 
@@ -305,6 +308,7 @@ public class ExamServiceImpl implements ExamService {
         if (exam.getExamQuestions() == null || exam.getExamQuestions().isEmpty()) {
             throw new RuntimeException("Đề thi chưa có câu hỏi, không thể sinh mã đề!");
         }
+        omrExamValidator.validateOmrExam(exam);
 
         ExamConfig config = exam.getConfig();
         boolean shuffleQuestions = config == null || !Boolean.FALSE.equals(config.getShuffleQuestions());
@@ -998,5 +1002,111 @@ public class ExamServiceImpl implements ExamService {
                 .startTime(draft.getStartTime())
                 .questions(questionDTOs)
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<StudentExamItemResponse> getMyExams(Long classroomId, ExamPurpose purpose, Pageable pageable) {
+        User student = userRepository.findByEmail(getCurrentUserEmail())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin học sinh!"));
+
+        if (classroomId != null
+                && !classroomRepository.isStudentInAnyClassroom(List.of(classroomId), student.getId())) {
+            throw new RuntimeException("Bạn không thuộc lớp này!");
+        }
+
+        Page<Exam> page = examRepository.findAvailableForStudent(
+                student.getId(), purpose, classroomId, ExamStatus.DRAFT, pageable);
+
+        List<Long> examIds = page.getContent().stream().map(Exam::getId).toList();
+        Map<Long, List<Submission>> byExamId = new HashMap<>();
+        if (!examIds.isEmpty()) {
+            for (Submission s : submissionRepository.findAllByStudentIdAndExamIdIn(student.getId(), examIds)) {
+                byExamId.computeIfAbsent(s.getExam().getId(), k -> new ArrayList<>()).add(s);
+            }
+        }
+
+        return page.map(exam -> toStudentExamItem(exam, byExamId.getOrDefault(exam.getId(), List.of())));
+    }
+
+    private StudentExamItemResponse toStudentExamItem(Exam exam, List<Submission> submissions) {
+        Submission preferred = null;
+        for (Submission s : submissions) {
+            if (preferred == null || preferSubmission(s, preferred)) {
+                preferred = s;
+            }
+        }
+
+        boolean timeLimited = isTimeLimitEnabled(exam);
+        GradingStatus myStatus = GradingStatus.NOT_STARTED;
+        if (preferred != null) {
+            if (preferred.getSubmitTime() != null) {
+                myStatus = GradingStatus.SUBMITTED;
+            } else if (timeLimited && isPastExamDuration(preferred.getStartTime(), exam.getDuration())) {
+                myStatus = GradingStatus.EXPIRED;
+            } else {
+                myStatus = GradingStatus.IN_PROGRESS;
+            }
+        }
+
+        long attemptsUsed = submissions.stream().filter(s -> s.getSubmitTime() != null).count();
+        Integer maxAttempts = effectiveMaxAttempts(exam);
+        boolean scoreVisible = exam.getConfig() == null
+                || !Boolean.FALSE.equals(exam.getConfig().getShowScoreToStudent());
+
+        boolean examOpen = isExamScheduleOpen(exam);
+        boolean canTake = false;
+        if (examOpen) {
+            if (preferred != null && preferred.getSubmitTime() == null) {
+                // Có draft: chỉ resume khi chưa hết giờ (khớp takeExam)
+                canTake = myStatus == GradingStatus.IN_PROGRESS;
+            } else {
+                canTake = maxAttempts == null || attemptsUsed < maxAttempts;
+            }
+        }
+
+        Double score = null;
+        if (preferred != null && preferred.getSubmitTime() != null && scoreVisible) {
+            score = preferred.getScore();
+        }
+
+        return StudentExamItemResponse.builder()
+                .examId(exam.getId())
+                .title(exam.getTitle())
+                .purpose(exam.getPurpose())
+                .examMode(exam.getExamMode())
+                .examStatus(exam.getStatus())
+                .myStatus(myStatus)
+                .duration(exam.getDuration())
+                .timeLimitEnabled(timeLimited)
+                .maxScore(exam.getMaxScore())
+                .subjectId(exam.getSubject().getId())
+                .subjectName(exam.getSubject().getSubjectName())
+                .teacherEmail(exam.getTeacher().getEmail())
+                .startAt(exam.getStartAt())
+                .endAt(exam.getEndAt())
+                .attemptNo(preferred != null ? preferred.getAttemptNo() : null)
+                .attemptsUsed((int) attemptsUsed)
+                .maxAttempts(maxAttempts)
+                .latestSubmissionId(preferred != null ? preferred.getId() : null)
+                .score(score)
+                .scoreVisible(scoreVisible)
+                .canTake(canTake)
+                .build();
+    }
+
+    private boolean isExamScheduleOpen(Exam exam) {
+        if (exam.getStatus() == ExamStatus.CLOSED || exam.getStatus() == ExamStatus.COMPLETED
+                || exam.getStatus() == ExamStatus.DRAFT) {
+            return false;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (exam.getStartAt() != null && now.isBefore(exam.getStartAt())) {
+            return false;
+        }
+        if (exam.getEndAt() != null && now.isAfter(exam.getEndAt())) {
+            return false;
+        }
+        return true;
     }
 }

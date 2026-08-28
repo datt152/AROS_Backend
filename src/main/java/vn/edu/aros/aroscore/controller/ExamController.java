@@ -20,6 +20,7 @@ import vn.edu.aros.aroscore.dto.response.ExamStatsResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTakeResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTemplateResponse;
 import vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse;
+import vn.edu.aros.aroscore.dto.response.StudentExamItemResponse;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.service.ExamService;
 import vn.edu.aros.aroscore.service.ExamTemplateService;
@@ -58,6 +59,17 @@ public class ExamController {
             @PathVariable Long examId,
             @PathVariable String versionCode) throws JsonProcessingException {
         return ResponseEntity.ok(examService.getExamVersionDetail(examId, versionCode));
+    }
+
+    @GetMapping("/my")
+//    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<Page<StudentExamItemResponse>> getMyExams(
+            @RequestParam(required = false) Long classroomId,
+            @RequestParam(required = false) ExamPurpose purpose,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return ResponseEntity.ok(examService.getMyExams(classroomId, purpose, pageable));
     }
 
     @GetMapping

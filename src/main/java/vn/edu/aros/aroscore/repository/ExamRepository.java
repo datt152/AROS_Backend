@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import vn.edu.aros.aroscore.entity.Exam;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
+import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 
 import java.util.Optional;
 
@@ -28,6 +29,15 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
 
     @Query("""
             SELECT DISTINCT e FROM Exam e
+            LEFT JOIN FETCH e.examQuestions eq
+            LEFT JOIN FETCH eq.question q
+            LEFT JOIN FETCH q.options
+            WHERE e.id = :id
+            """)
+    Optional<Exam> findByIdWithQuestions(@Param("id") Long id);
+
+    @Query("""
+            SELECT DISTINCT e FROM Exam e
             JOIN e.classrooms c
             WHERE c.id = :classroomId AND e.teacher.email = :email
             """)
@@ -45,5 +55,23 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
             @Param("classroomId") Long classroomId,
             @Param("email") String email,
             @Param("purpose") ExamPurpose purpose,
+            Pageable pageable);
+
+    /** Đề đã giao cho lớp mà student đang học; bỏ DRAFT. */
+    @Query("""
+            SELECT DISTINCT e FROM Exam e
+            JOIN e.classrooms c
+            JOIN c.students s
+            WHERE s.id = :studentId
+              AND c.isActive = true
+              AND e.status <> :draft
+              AND (:purpose IS NULL OR e.purpose = :purpose)
+              AND (:classroomId IS NULL OR c.id = :classroomId)
+            """)
+    Page<Exam> findAvailableForStudent(
+            @Param("studentId") Long studentId,
+            @Param("purpose") ExamPurpose purpose,
+            @Param("classroomId") Long classroomId,
+            @Param("draft") ExamStatus draft,
             Pageable pageable);
 }

@@ -14,6 +14,7 @@ import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamStatsResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTakeResponse;
 import vn.edu.aros.aroscore.dto.response.ExamVersionDetailResponse;
+import vn.edu.aros.aroscore.dto.response.StudentExamItemResponse;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 
 import java.util.List;
@@ -47,4 +48,6 @@ public interface ExamService {
     ExamGradingResponse getExamGrading(Long examId, Long classroomId);
 
     ExamStatsResponse getExamStats(Long examId, Long classroomId);
+
+    Page<StudentExamItemResponse> getMyExams(Long classroomId, ExamPurpose purpose, Pageable pageable);
 }
