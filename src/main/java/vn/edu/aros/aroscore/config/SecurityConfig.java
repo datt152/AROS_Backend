@@ -73,7 +73,7 @@ public class SecurityConfig {
                                 .requestMatchers("/api/test-jwt").permitAll()
 
                                 // Mở cửa hoàn toàn cho Swagger UI
-                                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/login", "/api/v1/subjects/**", "/api/v1/classes/**", "/api/v1/exams/**" ).permitAll()
+                                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/login", "/api/v1/subjects/**", "/api/v1/classes/**", "/api/v1/exams/**", "/api/v1/exam-sessions/**", "/api/v1/omr-sheets/**" ).permitAll()
                                 // TẤT CẢ các đường dẫn còn lại đều bị khóa, bắt buộc phải có Token
                                 .anyRequest().authenticated()
                 );
@@ -94,7 +94,7 @@ public class SecurityConfig {
         configuration.setAllowedOriginPatterns(Arrays.asList("*"));
 
         // Các phương thức được phép
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+                                configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
         // Các header được phép gửi lên
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept"));
