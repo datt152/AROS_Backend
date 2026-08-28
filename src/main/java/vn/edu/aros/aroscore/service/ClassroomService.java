@@ -30,4 +30,5 @@ public interface ClassroomService {
 
     List<StudentInfoResponse> getClassroomStudents(Long classId);
 
+    Page<ClassroomResponse> getMyClassrooms(Long subjectId, int page, int size);
 }

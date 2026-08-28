@@ -30,6 +30,15 @@ public class ClassroomController {
         return new ResponseEntity<>(classroomService.createClassroom(request), HttpStatus.CREATED);
     }
 
+    @GetMapping("/my")
+//    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<Page<ClassroomResponse>> getMyClassrooms(
+            @RequestParam(required = false) Long subjectId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(classroomService.getMyClassrooms(subjectId, page, size));
+    }
+
     @GetMapping
 //    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Page<ClassroomResponse>> getAllClassrooms(

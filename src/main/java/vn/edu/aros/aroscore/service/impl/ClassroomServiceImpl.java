@@ -224,4 +224,17 @@ public class ClassroomServiceImpl implements ClassroomService {
                 .studentCode(user.getStudentCode())
                 .build();
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ClassroomResponse> getMyClassrooms(Long subjectId, int page, int size) {
+        User student = userRepository.findByEmail(getCurrentUserEmail())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin học sinh!"));
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by("className").ascending());
+        Page<Classroom> classrooms = subjectId != null
+                ? classroomRepository.findAllActiveByStudentIdAndSubjectId(student.getId(), subjectId, pageable)
+                : classroomRepository.findAllActiveByStudentId(student.getId(), pageable);
+        return classrooms.map(classroomMapper::toResponse);
+    }
 }

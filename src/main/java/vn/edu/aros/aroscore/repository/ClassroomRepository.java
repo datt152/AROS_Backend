@@ -51,5 +51,22 @@ public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
             WHERE c.id IN :ids
             """)
     java.util.List<Classroom> findAllByIdInWithStudents(@Param("ids") java.util.Collection<Long> ids);
+
+    @Query("""
+            SELECT DISTINCT c FROM Classroom c
+            JOIN c.students s
+            WHERE s.id = :studentId AND c.isActive = true
+            """)
+    Page<Classroom> findAllActiveByStudentId(@Param("studentId") Long studentId, Pageable pageable);
+
+    @Query("""
+            SELECT DISTINCT c FROM Classroom c
+            JOIN c.students s
+            WHERE s.id = :studentId AND c.subject.id = :subjectId AND c.isActive = true
+            """)
+    Page<Classroom> findAllActiveByStudentIdAndSubjectId(
+            @Param("studentId") Long studentId,
+            @Param("subjectId") Long subjectId,
+            Pageable pageable);
 }
 
