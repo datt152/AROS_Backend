@@ -1,0 +1,29 @@
+# Build output
+target/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# Secrets / local env
+.env
+.env.local
+.env.*.local
+
+# Docs / misc
+HELP.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.yml
