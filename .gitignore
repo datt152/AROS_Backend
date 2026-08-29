@@ -32,4 +32,9 @@ build/
 ### VS Code ###
 .vscode/
 
+# Secrets / local env
+.env
+.env.local
+.env.*.local
+
 docker-compose.yml
