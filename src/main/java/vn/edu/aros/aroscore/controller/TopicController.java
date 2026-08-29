@@ -28,8 +28,9 @@ public class TopicController {
     public ResponseEntity<Page<TopicResponse>> getTopics(
             @RequestParam Long subjectId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(topicService.getTopicsBySubject(subjectId, page, size));
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "false") boolean includeInactive) {
+        return ResponseEntity.ok(topicService.getTopicsBySubject(subjectId, page, size, includeInactive));
     }
 
     @GetMapping("/{id}")

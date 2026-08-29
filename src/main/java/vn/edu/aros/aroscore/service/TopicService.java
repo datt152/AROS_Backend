@@ -7,7 +7,7 @@ import vn.edu.aros.aroscore.dto.response.TopicResponse;
 public interface TopicService {
     TopicResponse createTopic(TopicRequest request);
 
-    Page<TopicResponse> getTopicsBySubject(Long subjectId, int page, int size);
+    Page<TopicResponse> getTopicsBySubject(Long subjectId, int page, int size, boolean includeInactive);
 
     TopicResponse getTopicById(Long id);
 

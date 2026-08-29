@@ -17,11 +17,12 @@ public interface TopicRepository extends JpaRepository<Topic, Long> {
             SELECT t FROM Topic t
             WHERE t.subject.id = :subjectId
               AND t.subject.lecturer.email = :email
-              AND t.isActive = true
+              AND (:includeInactive = true OR t.isActive = true)
             """)
     Page<Topic> findAllBySubjectIdAndLecturerEmail(
             @Param("subjectId") Long subjectId,
             @Param("email") String email,
+            @Param("includeInactive") boolean includeInactive,
             Pageable pageable);
 
     @Query("""

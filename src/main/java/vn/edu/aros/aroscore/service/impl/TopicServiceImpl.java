@@ -33,8 +33,8 @@ public class TopicServiceImpl implements TopicService {
     @Transactional
     public TopicResponse createTopic(TopicRequest request) {
         String email = getCurrentUserEmail();
-        Subject subject = subjectRepository.findByIdAndLecturerEmail(request.getSubjectId(), email)
-                .orElseThrow(() -> new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền!"));
+        Subject subject = subjectRepository.findActiveByIdAndLecturerEmail(request.getSubjectId(), email)
+                .orElseThrow(() -> new RuntimeException("Môn học không tồn tại, đã bị ẩn hoặc bạn không có quyền!"));
 
         if (topicRepository.existsByNameAndSubjectId(request.getName().trim(), subject.getId())) {
             throw new RuntimeException("Chủ đề \"" + request.getName() + "\" đã tồn tại trong môn này!");
@@ -53,14 +53,14 @@ public class TopicServiceImpl implements TopicService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<TopicResponse> getTopicsBySubject(Long subjectId, int page, int size) {
+    public Page<TopicResponse> getTopicsBySubject(Long subjectId, int page, int size, boolean includeInactive) {
         String email = getCurrentUserEmail();
         if (!subjectRepository.findByIdAndLecturerEmail(subjectId, email).isPresent()) {
             throw new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền!");
         }
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("displayOrder").ascending().and(Sort.by("name").ascending()));
-        return topicRepository.findAllBySubjectIdAndLecturerEmail(subjectId, email, pageable)
+        return topicRepository.findAllBySubjectIdAndLecturerEmail(subjectId, email, includeInactive, pageable)
                 .map(this::toResponse);
     }
 
@@ -79,8 +79,8 @@ public class TopicServiceImpl implements TopicService {
         Topic topic = topicRepository.findActiveByIdAndLecturerEmail(id, email)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy chủ đề hoặc bạn không có quyền!"));
 
-        Subject subject = subjectRepository.findByIdAndLecturerEmail(request.getSubjectId(), email)
-                .orElseThrow(() -> new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền!"));
+        Subject subject = subjectRepository.findActiveByIdAndLecturerEmail(request.getSubjectId(), email)
+                .orElseThrow(() -> new RuntimeException("Môn học không tồn tại, đã bị ẩn hoặc bạn không có quyền!"));
 
         String newName = request.getName().trim();
         if (topicRepository.existsByNameAndSubjectIdAndIdNot(newName, subject.getId(), topic.getId())) {
