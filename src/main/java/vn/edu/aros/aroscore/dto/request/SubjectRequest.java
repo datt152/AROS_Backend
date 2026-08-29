@@ -9,4 +9,6 @@ public class SubjectRequest {
     private String subjectName;
 
     private String description;
+
+    private Boolean isActive;
 }

@@ -14,6 +14,7 @@ public interface SubjectMapper {
     @Mapping(target = "lecturer", ignore = true)
     @Mapping(target = "classrooms", ignore = true)
     @Mapping(target = "questions", ignore = true)
+    @Mapping(target = "isActive", constant = "true")
     Subject toEntity(SubjectRequest request);
 
     @Mapping(source = "lecturer.id", target = "lecturerId")
@@ -23,5 +24,6 @@ public interface SubjectMapper {
     @Mapping(target = "lecturer", ignore = true)
     @Mapping(target = "classrooms", ignore = true)
     @Mapping(target = "questions", ignore = true)
+    @Mapping(target = "isActive", ignore = true)
     void updateEntityFromRequest(SubjectRequest request, @MappingTarget Subject subject);
 }

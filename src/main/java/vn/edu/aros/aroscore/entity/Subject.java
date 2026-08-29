@@ -25,6 +25,10 @@ public class Subject {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column(name = "is_active")
+    @Builder.Default
+    private Boolean isActive = true;
+
     // Giảng viên phụ trách môn học
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "lecturer_id")

@@ -35,8 +35,9 @@ public class SubjectController {
     @GetMapping
     public ResponseEntity<Page<SubjectResponse>> getAllSubjects(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(subjectService.getAllSubjects(page, size));
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "false") boolean includeInactive) {
+        return ResponseEntity.ok(subjectService.getAllSubjects(page, size, includeInactive));
     }
 
     @PutMapping("/{id}")

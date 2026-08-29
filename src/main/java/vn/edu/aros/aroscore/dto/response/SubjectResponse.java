@@ -8,4 +8,5 @@ public class SubjectResponse {
     private String subjectName;
     private String description;
     private Long lecturerId;
+    private Boolean isActive;
 }

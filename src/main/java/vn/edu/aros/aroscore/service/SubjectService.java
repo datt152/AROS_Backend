@@ -10,7 +10,7 @@ public interface SubjectService {
     SubjectResponse getSubjectById(Long id);
 
 
-    Page<SubjectResponse> getAllSubjects(int page, int size);
+    Page<SubjectResponse> getAllSubjects(int page, int size, boolean includeInactive);
 
     SubjectResponse updateSubject(Long id, SubjectRequest request);
     void deleteSubject(Long id);
