@@ -17,8 +17,8 @@ public class JwtUtils {
     public static final String TOKEN_TYPE_ACCESS = "access";
     public static final String TOKEN_TYPE_REFRESH = "refresh";
 
-    // Khóa bí mật (Chuỗi này phải dài ít nhất 256 bit - dưới đây là mã Base64 ngẫu nhiên)
-    private final String jwtSecret = "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970";
+    @Value("${jwt.secret}")
+    private String jwtSecret;
 
     @Value("${jwt.access-expiration-ms:900000}")
     private long jwtExpirationMs;

@@ -21,11 +21,13 @@ import vn.edu.aros.aroscore.filter.JwtAuthenticationFilter;
 import vn.edu.aros.aroscore.service.CustomUserDetailsService;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import java.util.Arrays;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity // Cho phép phân quyền bằng annotation @PreAuthorize trên Controller
 public class SecurityConfig {
+
+    @Autowired
+    private CorsProperties corsProperties;
 
     @Autowired
     private CustomUserDetailsService userDetailsService;
@@ -89,18 +91,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-
-        // Cấu hình các domain được phép gọi (Thay * bằng domain frontend thật sau này)
-        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
-
-        // Các phương thức được phép
-                                configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-
-        // Các header được phép gửi lên
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept"));
-
-        // Cho phép gửi cookie/token
-        configuration.setAllowCredentials(true);
+        configuration.setAllowedOriginPatterns(corsProperties.getAllowedOriginPatterns());
+        configuration.setAllowedMethods(corsProperties.getAllowedMethods());
+        configuration.setAllowedHeaders(corsProperties.getAllowedHeaders());
+        configuration.setAllowCredentials(corsProperties.isAllowCredentials());
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration); // Áp dụng cho mọi API
