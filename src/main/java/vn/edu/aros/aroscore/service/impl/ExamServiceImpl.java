@@ -245,7 +245,7 @@ public class ExamServiceImpl implements ExamService {
         User teacher = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin giáo viên!"));
 
-        Subject subject = subjectRepository.findByIdAndLecturerEmail(request.getSubjectId(), email)
+        Subject subject = subjectRepository.findActiveByIdAndLecturerEmail(request.getSubjectId(), email)
                 .orElseThrow(() -> new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền truy cập!"));
 
         List<Question> questions = questionRepository.findAllById(request.getQuestionIds());
@@ -817,7 +817,7 @@ public class ExamServiceImpl implements ExamService {
         }
 
         if (!exam.getSubject().getId().equals(request.getSubjectId())) {
-            Subject subject = subjectRepository.findByIdAndLecturerEmail(request.getSubjectId(), email)
+            Subject subject = subjectRepository.findActiveByIdAndLecturerEmail(request.getSubjectId(), email)
                     .orElseThrow(() -> new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền!"));
 
             boolean allMatchSubject = exam.getExamQuestions().stream()

@@ -43,7 +43,7 @@ public class QuestionServiceImpl implements QuestionService {
         User teacher = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin giảng viên!"));
 
-        Subject subject = subjectRepository.findByIdAndLecturerEmail(request.getSubjectId(), email)
+        Subject subject = subjectRepository.findActiveByIdAndLecturerEmail(request.getSubjectId(), email)
                 .orElseThrow(() -> new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền!"));
 
         Topic topic = resolveTopic(request.getTopicId(), subject, email);
@@ -57,8 +57,8 @@ public class QuestionServiceImpl implements QuestionService {
             throw new RuntimeException("Câu hỏi chọn 1 đáp án bắt buộc phải có CHÍNH XÁC 1 đáp án đúng!");
         }
 
-        if (request.getType() == QuestionType.MULTIPLE_CHOICE && correctCount < 1) {
-            throw new RuntimeException("Câu hỏi chọn nhiều đáp án phải có ít nhất 1 đáp án đúng!");
+        if (request.getType() == QuestionType.MULTIPLE_CHOICE && correctCount < 2) {
+            throw new RuntimeException("Câu hỏi chọn nhiều đáp án phải có ít nhất 2 đáp án đúng!");
         }
         // =====================================
 
@@ -112,7 +112,7 @@ public class QuestionServiceImpl implements QuestionService {
         // 2. Cập nhật môn học nếu có thay đổi
         Subject subject = question.getSubject();
         if (!question.getSubject().getId().equals(request.getSubjectId())) {
-            subject = subjectRepository.findByIdAndLecturerEmail(request.getSubjectId(), email)
+            subject = subjectRepository.findActiveByIdAndLecturerEmail(request.getSubjectId(), email)
                     .orElseThrow(() -> new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền!"));
             question.setSubject(subject);
         }
@@ -127,8 +127,8 @@ public class QuestionServiceImpl implements QuestionService {
         if (request.getType() == QuestionType.SINGLE_CHOICE && correctCount != 1) {
             throw new RuntimeException("Câu hỏi chọn 1 đáp án bắt buộc phải có CHÍNH XÁC 1 đáp án đúng!");
         }
-        if (request.getType() == QuestionType.MULTIPLE_CHOICE && correctCount < 1) {
-            throw new RuntimeException("Câu hỏi chọn nhiều đáp án phải có ít nhất 1 đáp án đúng!");
+        if (request.getType() == QuestionType.MULTIPLE_CHOICE && correctCount < 2) {
+            throw new RuntimeException("Câu hỏi chọn nhiều đáp án phải có ít nhất 2 đáp án đúng!");
         }
 
         // 4. Cập nhật thông tin cơ bản

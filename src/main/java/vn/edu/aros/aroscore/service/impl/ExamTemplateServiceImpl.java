@@ -58,7 +58,7 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         String email = getCurrentUserEmail();
         User teacher = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin giáo viên!"));
-        Subject subject = subjectRepository.findByIdAndLecturerEmail(request.getSubjectId(), email)
+        Subject subject = subjectRepository.findActiveByIdAndLecturerEmail(request.getSubjectId(), email)
                 .orElseThrow(() -> new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền!"));
 
         List<Question> questions = loadAndValidateQuestions(request.getQuestionIds(), subject.getId(), null);
@@ -133,7 +133,7 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         String email = getCurrentUserEmail();
         ExamTemplate template = getOwnedActiveTemplate(id);
 
-        Subject subject = subjectRepository.findByIdAndLecturerEmail(request.getSubjectId(), email)
+        Subject subject = subjectRepository.findActiveByIdAndLecturerEmail(request.getSubjectId(), email)
                 .orElseThrow(() -> new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền!"));
 
         List<Question> questions = loadAndValidateQuestions(request.getQuestionIds(), subject.getId(), null);
