@@ -5,6 +5,7 @@ import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
 import org.mapstruct.NullValuePropertyMappingStrategy;
 import vn.edu.aros.aroscore.dto.request.ClassroomRequest;
+import vn.edu.aros.aroscore.dto.request.ClassroomUpdateRequest;
 import vn.edu.aros.aroscore.dto.response.ClassroomResponse;
 import vn.edu.aros.aroscore.entity.Classroom;
 
@@ -25,4 +26,9 @@ public interface ClassroomMapper {
     @Mapping(target = "subject", ignore = true)
     @Mapping(target = "students", ignore = true)
     void updateEntityFromRequest(ClassroomRequest request, @MappingTarget Classroom classroom);
+
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "subject", ignore = true)
+    @Mapping(target = "students", ignore = true)
+    void updateEntityFromUpdateRequest(ClassroomUpdateRequest request, @MappingTarget Classroom classroom);
 }

@@ -10,13 +10,49 @@ import vn.edu.aros.aroscore.entity.Classroom;
 import java.util.Optional;
 
 public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
-    @Query("SELECT c FROM Classroom c WHERE c.subject.lecturer.email = :email")
-    Page<Classroom> findAllByLecturerEmail(@Param("email") String email, Pageable pageable);
+    @Query("""
+            SELECT c FROM Classroom c
+            WHERE c.subject.lecturer.email = :email
+              AND (:includeInactive = true OR c.isActive = true)
+            """)
+    Page<Classroom> findAllByLecturerEmail(
+            @Param("email") String email,
+            @Param("includeInactive") boolean includeInactive,
+            Pageable pageable);
 
-    @Query("SELECT c FROM Classroom c WHERE c.subject.id = :subjectId AND c.subject.lecturer.email = :email")
-    Page<Classroom> findAllBySubjectIdAndLecturerEmail(@Param("subjectId") Long subjectId, @Param("email") String email, Pageable pageable);
+    @Query("""
+            SELECT c FROM Classroom c
+            WHERE c.subject.id = :subjectId
+              AND c.subject.lecturer.email = :email
+              AND (:includeInactive = true OR c.isActive = true)
+            """)
+    Page<Classroom> findAllBySubjectIdAndLecturerEmail(
+            @Param("subjectId") Long subjectId,
+            @Param("email") String email,
+            @Param("includeInactive") boolean includeInactive,
+            Pageable pageable);
 
-    boolean existsByClassNameAndSubjectId(String className, Long subjectId);
+    @Query("""
+            SELECT CASE WHEN COUNT(c) > 0 THEN TRUE ELSE FALSE END
+            FROM Classroom c
+            WHERE c.className = :className
+              AND c.subject.id = :subjectId
+              AND c.isActive = true
+            """)
+    boolean existsByClassNameAndSubjectId(@Param("className") String className, @Param("subjectId") Long subjectId);
+
+    @Query("""
+            SELECT CASE WHEN COUNT(c) > 0 THEN TRUE ELSE FALSE END
+            FROM Classroom c
+            WHERE c.className = :className
+              AND c.subject.id = :subjectId
+              AND c.id <> :excludeId
+              AND c.isActive = true
+            """)
+    boolean existsByClassNameAndSubjectIdAndIdNot(
+            @Param("className") String className,
+            @Param("subjectId") Long subjectId,
+            @Param("excludeId") Long excludeId);
 
     @Query("SELECT DISTINCT c FROM Classroom c LEFT JOIN FETCH c.students s LEFT JOIN FETCH s.account WHERE c.id = :id")
     Optional<Classroom> findByIdWithStudents(@Param("id") Long id);
@@ -69,4 +105,3 @@ public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
             @Param("subjectId") Long subjectId,
             Pageable pageable);
 }
-

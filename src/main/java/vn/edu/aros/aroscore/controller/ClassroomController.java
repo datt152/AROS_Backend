@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import vn.edu.aros.aroscore.dto.request.ClassroomRequest;
+import vn.edu.aros.aroscore.dto.request.ClassroomUpdateRequest;
 import vn.edu.aros.aroscore.dto.request.EnrollStudentRequest;
 import vn.edu.aros.aroscore.dto.response.ClassroomResponse;
 import vn.edu.aros.aroscore.dto.response.StudentInfoResponse;
@@ -44,9 +45,10 @@ public class ClassroomController {
     public ResponseEntity<Page<ClassroomResponse>> getAllClassrooms(
             @RequestParam(required = false) Long subjectId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "false") boolean includeInactive) {
 
-        return ResponseEntity.ok(classroomService.getAllClassrooms(subjectId, page, size));
+        return ResponseEntity.ok(classroomService.getAllClassrooms(subjectId, page, size, includeInactive));
     }
 
     @GetMapping("/{id}")
@@ -65,7 +67,7 @@ public class ClassroomController {
 //    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<ClassroomResponse> updateClassroom(
             @PathVariable Long id,
-            @Valid @RequestBody ClassroomRequest request) {
+            @Valid @RequestBody ClassroomUpdateRequest request) {
         return ResponseEntity.ok(classroomService.updateClassroom(id, request));
     }
 
