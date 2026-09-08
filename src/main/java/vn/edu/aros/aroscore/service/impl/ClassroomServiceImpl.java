@@ -153,10 +153,13 @@ public class ClassroomServiceImpl implements ClassroomService {
     public void removeStudentFromClass(Long classId, Long studentId) {
         Classroom classroom = getAuthorizedClassroom(classId);
 
-        User student = userRepository.findByIdWithAccount(studentId)
+        User student = userRepository.findById(studentId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy sinh viên!"));
 
-        assertStudentRole(student);
+        Account account = student.getAccount();
+        if (account != null && account.getRole() != UserRole.STUDENT) {
+            throw new RuntimeException("Chỉ có thể xóa sinh viên khỏi lớp!");
+        }
 
         if (classroom.getStudents() == null || !classroom.getStudents().contains(student)) {
             throw new RuntimeException("Sinh viên không thuộc lớp học này!");
