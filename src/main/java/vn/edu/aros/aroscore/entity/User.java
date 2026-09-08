@@ -24,7 +24,7 @@ public class User {
     @Column(name = "phone", length = 15)
     private String phone; // Bổ sung để khớp với nghiệp vụ
 
-    @Column(name = "student_code", unique = true, length = 20)
+    @Column(name = "student_code", length = 20)
     private String studentCode;
 
     @Column(name = "is_active")
