@@ -14,5 +14,6 @@ public class UserResponse {
     private String email;
     private String phone;
     private String studentCode;
+    private Boolean profileComplete;
     private UserRole role;
 }

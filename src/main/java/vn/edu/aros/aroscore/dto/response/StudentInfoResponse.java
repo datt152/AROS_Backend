@@ -15,4 +15,5 @@ public class StudentInfoResponse {
     private String email;
     private String phone;
     private String studentCode;
+    private Boolean missingStudentCode;
 }

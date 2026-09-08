@@ -48,4 +48,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByStudentCodeInClassrooms(
             @Param("classroomIds") java.util.Collection<Long> classroomIds,
             @Param("studentCode") String studentCode);
+
+    @Query("""
+            SELECT c.id FROM Classroom c JOIN c.students s
+            WHERE s.id = :studentId AND c.isActive = true
+            """)
+    List<Long> findActiveClassroomIdsByStudentId(@Param("studentId") Long studentId);
 }

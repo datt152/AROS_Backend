@@ -1,39 +1,69 @@
 package vn.edu.aros.aroscore.service.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import vn.edu.aros.aroscore.dto.request.UpdateStudentCodeRequest;
 import vn.edu.aros.aroscore.dto.response.UserResponse;
 import vn.edu.aros.aroscore.entity.Account;
 import vn.edu.aros.aroscore.entity.User;
+import vn.edu.aros.aroscore.entity.enums.UserRole;
 import vn.edu.aros.aroscore.repository.AccountRepository;
+import vn.edu.aros.aroscore.repository.UserRepository;
+import vn.edu.aros.aroscore.service.StudentCodeService;
 import vn.edu.aros.aroscore.service.UserService;
 
 @Service
+@RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
-    @Autowired
-    private AccountRepository accountRepository;
+    private final AccountRepository accountRepository;
+    private final UserRepository userRepository;
+    private final StudentCodeService studentCodeService;
 
     @Override
+    @Transactional(readOnly = true)
     public UserResponse getMyProfile() {
-        // 1. Lấy Email của người dùng đang gửi request từ SecurityContext
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return toResponse(loadCurrentAccount());
+    }
 
-        // 2. Query DB để lấy Account (Từ Account sẽ lấy được User nhờ quan hệ 1-1)
-        Account account = accountRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy tài khoản hợp lệ!"));
+    @Override
+    @Transactional
+    public UserResponse updateMyStudentCode(UpdateStudentCodeRequest request) {
+        Account account = loadCurrentAccount();
+        if (account.getRole() != UserRole.STUDENT) {
+            throw new IllegalArgumentException("Quyền truy cập không hợp lệ!");
+        }
 
         User user = account.getUser();
+        String normalized = studentCodeService.validateForAllClassroomsOfUser(
+                request.getStudentCode(), user.getId());
 
-        // 3. Map sang DTO và trả về
+        user.setStudentCode(normalized);
+        userRepository.save(user);
+
+        return toResponse(account);
+    }
+
+    private Account loadCurrentAccount() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return accountRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy tài khoản hợp lệ!"));
+    }
+
+    private UserResponse toResponse(Account account) {
+        User user = account.getUser();
+        String code = user.getStudentCode();
+        boolean complete = code != null && !code.isBlank();
         return UserResponse.builder()
                 .id(user.getId())
                 .accountId(account.getId())
                 .fullName(user.getFullName())
-                .email(account.getEmail()) // Lấy từ Account để đảm bảo chính xác nhất
+                .email(account.getEmail())
                 .phone(user.getPhone())
-                .studentCode(user.getStudentCode())
+                .studentCode(code)
+                .profileComplete(complete)
                 .role(account.getRole())
                 .build();
     }

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import vn.edu.aros.aroscore.dto.request.ClassroomRequest;
 import vn.edu.aros.aroscore.dto.request.ClassroomUpdateRequest;
 import vn.edu.aros.aroscore.dto.request.EnrollStudentRequest;
+import vn.edu.aros.aroscore.dto.request.UpdateStudentCodeRequest;
 import vn.edu.aros.aroscore.dto.response.ClassroomResponse;
 import vn.edu.aros.aroscore.dto.response.StudentInfoResponse;
 import vn.edu.aros.aroscore.service.ClassroomService;
@@ -95,5 +96,17 @@ public class ClassroomController {
 
         classroomService.removeStudentFromClass(id, studentId);
         return ResponseEntity.ok("Đã xóa sinh viên khỏi lớp!");
+    }
+
+    /**
+     * Giáo viên gán/sửa mã sinh viên cho SV trong lớp.
+     */
+    @PatchMapping("/{id}/students/{studentId}/student-code")
+//    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<StudentInfoResponse> updateStudentCode(
+            @PathVariable Long id,
+            @PathVariable Long studentId,
+            @Valid @RequestBody UpdateStudentCodeRequest request) {
+        return ResponseEntity.ok(classroomService.updateStudentCodeInClass(id, studentId, request));
     }
 }
