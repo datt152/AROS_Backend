@@ -276,7 +276,6 @@ public class ClassroomServiceImpl implements ClassroomService {
                 .id(user.getId())
                 .fullName(user.getFullName())
                 .email(user.getEmail())
-                .phone(user.getPhone())
                 .studentCode(code)
                 .missingStudentCode(missing)
                 .build();

@@ -1,6 +1,5 @@
 package vn.edu.aros.aroscore.dto.response;
 
-
 import lombok.Builder;
 import lombok.Data;
 import vn.edu.aros.aroscore.entity.enums.UserRole;
@@ -12,8 +11,8 @@ public class UserResponse {
     private Long accountId;
     private String fullName;
     private String email;
-    private String phone;
     private String studentCode;
+    /** true khi đã có MSSV (không null/blank) */
     private Boolean profileComplete;
     private UserRole role;
 }

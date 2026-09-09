@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.edu.aros.aroscore.dto.request.UpdateProfileRequest;
 import vn.edu.aros.aroscore.dto.request.UpdateStudentCodeRequest;
 import vn.edu.aros.aroscore.dto.response.UserResponse;
 import vn.edu.aros.aroscore.entity.Account;
@@ -26,6 +27,27 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public UserResponse getMyProfile() {
         return toResponse(loadCurrentAccount());
+    }
+
+    @Override
+    @Transactional
+    public UserResponse updateMyProfile(UpdateProfileRequest request) {
+        Account account = loadCurrentAccount();
+        User user = account.getUser();
+
+        user.setFullName(request.getFullName().trim());
+
+        if (request.getStudentCode() != null && !request.getStudentCode().isBlank()) {
+            if (account.getRole() != UserRole.STUDENT) {
+                throw new IllegalArgumentException("Chỉ sinh viên mới cập nhật mã sinh viên!");
+            }
+            String normalized = studentCodeService.validateForAllClassroomsOfUser(
+                    request.getStudentCode(), user.getId());
+            user.setStudentCode(normalized);
+        }
+
+        userRepository.save(user);
+        return toResponse(account);
     }
 
     @Override
@@ -61,7 +83,6 @@ public class UserServiceImpl implements UserService {
                 .accountId(account.getId())
                 .fullName(user.getFullName())
                 .email(account.getEmail())
-                .phone(user.getPhone())
                 .studentCode(code)
                 .profileComplete(complete)
                 .role(account.getRole())

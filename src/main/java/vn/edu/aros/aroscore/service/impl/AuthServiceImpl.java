@@ -53,7 +53,6 @@ public class AuthServiceImpl implements AuthService {
         User user = new User();
         user.setFullName(request.getFullName());
         user.setEmail(request.getEmail());
-        user.setPhone(request.getPhone());
         user.setActive(true);
 
         // 5. Khởi tạo Account và liên kết với User

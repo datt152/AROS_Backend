@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import vn.edu.aros.aroscore.dto.request.UpdateProfileRequest;
 import vn.edu.aros.aroscore.dto.request.UpdateStudentCodeRequest;
 import vn.edu.aros.aroscore.dto.response.UserResponse;
 import vn.edu.aros.aroscore.service.UserService;
@@ -25,7 +26,16 @@ public class UserController {
     }
 
     /**
-     * Sinh viên tự cập nhật mã sinh viên (8 chữ số).
+     * Cập nhật hồ sơ: fullName (bắt buộc), studentCode (tuỳ chọn, chỉ STUDENT).
+     */
+    @PutMapping("/me")
+    public ResponseEntity<UserResponse> updateMyProfile(
+            @Valid @RequestBody UpdateProfileRequest request) {
+        return ResponseEntity.ok(userService.updateMyProfile(request));
+    }
+
+    /**
+     * Sinh viên chỉ cập nhật mã sinh viên (8 chữ số).
      */
     @PutMapping("/me/student-code")
     public ResponseEntity<UserResponse> updateMyStudentCode(
