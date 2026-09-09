@@ -12,7 +12,6 @@ public class UserResponse {
     private String fullName;
     private String email;
     private String studentCode;
-    /** true khi đã có MSSV (không null/blank) */
     private Boolean profileComplete;
     private UserRole role;
 }
