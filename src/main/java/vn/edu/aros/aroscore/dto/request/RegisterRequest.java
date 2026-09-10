@@ -27,4 +27,7 @@ public class RegisterRequest {
 
     @NotNull(message = "Role không được để trống")
     private UserRole role;
+
+    @NotBlank(message = "Vui lòng hoàn thành xác minh captcha")
+    private String captchaToken;
 }

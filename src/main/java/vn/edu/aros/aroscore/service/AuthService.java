@@ -6,7 +6,7 @@ import vn.edu.aros.aroscore.dto.response.AuthSession;
 import vn.edu.aros.aroscore.dto.response.LoginResponse;
 
 public interface AuthService {
-    public void registerAccount(RegisterRequest request);
-    public AuthSession authenticateUser(LoginRequest request);
-    public LoginResponse refreshAccessToken(String refreshToken);
+    void registerAccount(RegisterRequest request, String remoteIp);
+    AuthSession authenticateUser(LoginRequest request);
+    LoginResponse refreshAccessToken(String refreshToken);
 }

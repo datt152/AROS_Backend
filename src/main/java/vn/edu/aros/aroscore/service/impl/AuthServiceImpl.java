@@ -19,6 +19,7 @@ import vn.edu.aros.aroscore.exception.UnauthorizedException;
 import vn.edu.aros.aroscore.repository.AccountRepository;
 import vn.edu.aros.aroscore.service.AuthService;
 import vn.edu.aros.aroscore.service.CustomUserDetailsService;
+import vn.edu.aros.aroscore.service.TurnstileService;
 import vn.edu.aros.aroscore.utils.JwtUtils;
 
 @Service
@@ -29,43 +30,39 @@ public class AuthServiceImpl implements AuthService {
     @Autowired private AuthenticationManager authenticationManager;
     @Autowired private CustomUserDetailsService customUserDetailsService;
     @Autowired private JwtUtils jwtUtils;
+    @Autowired private TurnstileService turnstileService;
 
     @Override
     @Transactional
-    public void registerAccount(RegisterRequest request) {
-        // 1. Kiểm tra mật khẩu xác nhận
+    public void registerAccount(RegisterRequest request, String remoteIp) {
+        turnstileService.verifyOrThrow(request.getCaptchaToken(), remoteIp);
+
         if (!request.getPassword().equals(request.getConfirmPassword())) {
-            throw new RuntimeException("Mật khẩu xác nhận không khớp!");
+            throw new IllegalArgumentException("Mật khẩu xác nhận không khớp!");
         }
 
-        // 2. Chỉ cho phép đăng ký TEACHER hoặc STUDENT
-        UserRole role = request.getRole();
-        if (role != UserRole.TEACHER && role != UserRole.STUDENT) {
-            throw new RuntimeException("Role đăng ký chỉ được phép là TEACHER hoặc STUDENT!");
+        // Public self-register chỉ dành cho giáo viên
+        if (request.getRole() != UserRole.TEACHER) {
+            throw new IllegalArgumentException("Chỉ được đăng ký tài khoản giáo viên!");
         }
 
-        // 3. Kiểm tra trùng lặp Email (1 email = 1 account / 1 role)
         if (accountRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email đã tồn tại trong hệ thống!");
+            throw new IllegalArgumentException("Email đã tồn tại trong hệ thống!");
         }
 
-        // 4. Khởi tạo Profile User trước
         User user = new User();
         user.setFullName(request.getFullName());
         user.setEmail(request.getEmail());
         user.setActive(true);
 
-        // 5. Khởi tạo Account và liên kết với User
         Account account = new Account();
         account.setEmail(request.getEmail());
         account.setPassword(passwordEncoder.encode(request.getPassword()));
-        account.setRole(role);
-
-        // Gắn User vào Account. Nhờ cascade = CascadeType.ALL ở Account, User sẽ tự động được lưu.
+        account.setRole(UserRole.TEACHER);
         account.setUser(user);
 
-        // 6. Lưu xuống Database
         accountRepository.save(account);
+        // captchaToken không được lưu DB (chỉ dùng để verify)
     }
 
     @Override

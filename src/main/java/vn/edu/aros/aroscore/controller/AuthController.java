@@ -42,8 +42,10 @@ public class AuthController {
     private String refreshCookieSameSite;
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
-        authService.registerAccount(request);
+    public ResponseEntity<?> register(
+            @Valid @RequestBody RegisterRequest request,
+            HttpServletRequest httpRequest) {
+        authService.registerAccount(request, resolveClientIp(httpRequest));
         return ResponseEntity.status(HttpStatus.CREATED).body("Đăng ký tài khoản thành công!");
     }
 
@@ -92,5 +94,13 @@ public class AuthController {
             }
         }
         return null;
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }
