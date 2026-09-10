@@ -8,13 +8,16 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import vn.edu.aros.aroscore.dto.request.BulkCreateAccountsRequest;
 import vn.edu.aros.aroscore.dto.request.ClassroomRequest;
 import vn.edu.aros.aroscore.dto.request.ClassroomUpdateRequest;
 import vn.edu.aros.aroscore.dto.request.EnrollStudentRequest;
 import vn.edu.aros.aroscore.dto.request.UpdateStudentCodeRequest;
+import vn.edu.aros.aroscore.dto.response.BulkCreateAccountsResultResponse;
 import vn.edu.aros.aroscore.dto.response.ClassroomResponse;
 import vn.edu.aros.aroscore.dto.response.StudentImportResultResponse;
 import vn.edu.aros.aroscore.dto.response.StudentInfoResponse;
+import vn.edu.aros.aroscore.service.BulkAccountService;
 import vn.edu.aros.aroscore.service.ClassroomService;
 import vn.edu.aros.aroscore.service.StudentImportService;
 
@@ -29,6 +32,9 @@ public class ClassroomController {
 
     @Autowired
     private StudentImportService studentImportService;
+
+    @Autowired
+    private BulkAccountService bulkAccountService;
 
     @PostMapping
 //    @PreAuthorize("hasRole('TEACHER')")
@@ -102,6 +108,19 @@ public class ClassroomController {
             @PathVariable Long id,
             @RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(studentImportService.importStudentsFromExcel(id, file));
+    }
+
+    /**
+     * Tạo tài khoản đăng nhập hàng loạt cho SV trong lớp (chưa có Account).
+     * Mật khẩu tạm random (UUID) → gửi email async.
+     */
+    @PostMapping("/{id}/students/create-accounts")
+//    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<BulkCreateAccountsResultResponse> createAccounts(
+            @PathVariable Long id,
+            @RequestBody(required = false) BulkCreateAccountsRequest request) {
+        return ResponseEntity.ok(bulkAccountService.createAccountsForClassroom(
+                id, request != null ? request : new BulkCreateAccountsRequest()));
     }
 
     @DeleteMapping("/{id}/students/{studentId}")

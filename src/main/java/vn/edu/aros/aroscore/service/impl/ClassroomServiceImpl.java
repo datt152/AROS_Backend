@@ -272,12 +272,14 @@ public class ClassroomServiceImpl implements ClassroomService {
     private StudentInfoResponse toStudentInfoResponse(User user) {
         String code = user.getStudentCode();
         boolean missing = code == null || code.isBlank();
+        boolean hasAccount = user.getAccount() != null;
         return StudentInfoResponse.builder()
                 .id(user.getId())
                 .fullName(user.getFullName())
                 .email(user.getEmail())
                 .studentCode(code)
                 .missingStudentCode(missing)
+                .hasAccount(hasAccount)
                 .build();
     }
 }

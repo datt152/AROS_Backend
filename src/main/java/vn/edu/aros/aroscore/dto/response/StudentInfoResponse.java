@@ -15,4 +15,6 @@ public class StudentInfoResponse {
     private String email;
     private String studentCode;
     private Boolean missingStudentCode;
+    /** true nếu đã có Account đăng nhập */
+    private Boolean hasAccount;
 }
