@@ -8,6 +8,8 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import vn.edu.aros.aroscore.entity.Question;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -39,4 +41,12 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
 
     @Query("SELECT q FROM Question q WHERE q.id = :id AND q.teacher.email = :email")
     Optional<Question> findByIdAndTeacherEmail(@Param("id") Long id, @Param("email") String email);
+
+    /** Step 2: fetch options riêng (sau khi đã load examQuestions). */
+    @Query("""
+            SELECT DISTINCT q FROM Question q
+            LEFT JOIN FETCH q.options
+            WHERE q.id IN :ids
+            """)
+    List<Question> findByIdInWithOptions(@Param("ids") Collection<Long> ids);
 }

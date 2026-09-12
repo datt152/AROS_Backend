@@ -31,7 +31,6 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
             SELECT DISTINCT e FROM Exam e
             LEFT JOIN FETCH e.examQuestions eq
             LEFT JOIN FETCH eq.question q
-            LEFT JOIN FETCH q.options
             WHERE e.id = :id
             """)
     Optional<Exam> findByIdWithQuestions(@Param("id") Long id);
