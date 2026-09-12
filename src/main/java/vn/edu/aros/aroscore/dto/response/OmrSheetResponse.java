@@ -25,6 +25,7 @@ public class OmrSheetResponse {
     private Double score;
     private Double maxScore;
     private String warpedUrl;
+    private String cloudFolder;
     private String originalImageUrl;
     private List<Integer> needReview;
     private List<OmrAnswerItemResponse> answers;

@@ -18,6 +18,7 @@ import vn.edu.aros.aroscore.dto.response.OmrSheetResponse;
 import vn.edu.aros.aroscore.entity.*;
 import vn.edu.aros.aroscore.entity.enums.ExamSessionStatus;
 import vn.edu.aros.aroscore.entity.enums.OmrSheetStatus;
+import vn.edu.aros.aroscore.exception.OmrRetakeRequiredException;
 import vn.edu.aros.aroscore.repository.*;
 import vn.edu.aros.aroscore.service.OmrSheetService;
 import vn.edu.aros.aroscore.service.omr.OmrGradingService;
@@ -26,6 +27,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -39,6 +42,7 @@ public class OmrSheetServiceImpl implements OmrSheetService {
 
     private final ExamSessionRepository examSessionRepository;
     private final ExamRepository examRepository;
+    private final QuestionRepository questionRepository;
     private final OMRFileRepository omrFileRepository;
     private final ExamVersionRepository examVersionRepository;
     private final UserRepository userRepository;
@@ -52,6 +56,43 @@ public class OmrSheetServiceImpl implements OmrSheetService {
         return SecurityContextHolder.getContext().getAuthentication().getName();
     }
 
+    /** Load exam + questions, rồi fetch options ở query riêng (tránh MultipleBagFetchException). */
+    private Exam loadExamWithQuestionsAndOptions(Long examId) {
+        Exam exam = examRepository.findByIdWithQuestions(examId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đề thi!"));
+        List<Long> questionIds = exam.getExamQuestions() == null
+                ? List.of()
+                : exam.getExamQuestions().stream()
+                .map(eq -> eq.getQuestion().getId())
+                .distinct()
+                .toList();
+        if (!questionIds.isEmpty()) {
+            questionRepository.findByIdInWithOptions(questionIds);
+        }
+        // Touch classrooms trong transaction để match MSSV theo lớp
+        if (exam.getClassrooms() != null) {
+            exam.getClassrooms().size();
+        }
+        return exam;
+    }
+
+    /**
+     * Match MSSV trong các lớp được giao đề. 0 hoặc >1 kết quả → null (cần review).
+     */
+    private User resolveStudentInExamClassrooms(Exam exam, String studentCode) {
+        List<Long> classroomIds = exam.getClassrooms() == null
+                ? List.of()
+                : exam.getClassrooms().stream().map(Classroom::getId).distinct().toList();
+        if (classroomIds.isEmpty()) {
+            return null;
+        }
+        List<User> matches = userRepository.findByStudentCodeInClassrooms(classroomIds, studentCode);
+        if (matches.size() == 1) {
+            return matches.getFirst();
+        }
+        return null;
+    }
+
     @Override
     @Transactional
     public OmrSheetResponse uploadAndScan(Long sessionId, MultipartFile file) {
@@ -63,13 +104,29 @@ public class OmrSheetServiceImpl implements OmrSheetService {
         }
 
         validateFile(file);
-        Exam exam = examRepository.findByIdWithQuestions(session.getExam().getId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đề thi!"));
+        Long teacherId = session.getExam().getTeacher().getId();
+        Exam exam = loadExamWithQuestionsAndOptions(session.getExam().getId());
         session.setExam(exam);
+
+        final byte[] fileBytes;
+        try {
+            fileBytes = file.getBytes();
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Không đọc được file ảnh!");
+        }
+        String contentHash = sha256Hex(fileBytes);
+        if (omrFileRepository.existsDuplicateInSession(
+                sessionId,
+                contentHash,
+                List.of(OmrSheetStatus.GRADED, OmrSheetStatus.NEEDS_REVIEW, OmrSheetStatus.PROCESSING))) {
+            throw new IllegalArgumentException(
+                    "Ảnh này đã được quét trong phiên chấm. Không tạo bài nộp mới.");
+        }
 
         OMRFile sheet = OMRFile.builder()
                 .fileName(file.getOriginalFilename() != null ? file.getOriginalFilename() : "sheet.jpg")
                 .filePath("pending")
+                .contentHash(contentHash)
                 .exam(exam)
                 .examSession(session)
                 .status(OmrSheetStatus.PROCESSING)
@@ -77,23 +134,28 @@ public class OmrSheetServiceImpl implements OmrSheetService {
                 .build();
         sheet = omrFileRepository.save(sheet);
 
+        String teacherIdStr = String.valueOf(teacherId);
+        String sessionIdStr = String.valueOf(sessionId);
+        String submissionIdStr = String.valueOf(sheet.getId());
+
         Path savedPath = storeFile(file, sheet.getId());
         sheet.setFilePath(savedPath.toString().replace("\\", "/"));
         omrFileRepository.save(sheet);
 
         try {
-            OmrEngineClient.OmrScanResult scanResult = omrEngineClient.scan(savedPath, sheet.getId());
+            OmrEngineClient.OmrScanResult scanResult = omrEngineClient.scan(
+                    savedPath, teacherIdStr, sessionIdStr, submissionIdStr);
             if (!scanResult.success() || scanResult.response() == null) {
                 sheet.setStatus(OmrSheetStatus.FAILED);
                 omrFileRepository.save(sheet);
                 throw new RuntimeException("OMR Engine lỗi: " + scanResult.errorMessage());
             }
             return applyScanResult(sheet, scanResult.response());
-        } catch (OmrEngineClient.OmrRetakeRequiredException e) {
+        } catch (OmrRetakeRequiredException e) {
             sheet.setStatus(OmrSheetStatus.RETAKE_REQUIRED);
             sheet.setOmrRaw(e.getMessage());
             omrFileRepository.save(sheet);
-            throw new RuntimeException("Cần chụp lại ảnh phiếu: " + e.getMessage());
+            throw e;
         }
     }
 
@@ -127,12 +189,28 @@ public class OmrSheetServiceImpl implements OmrSheetService {
             throw new RuntimeException("Phiếu chưa có mã đề, không thể chấm lại!");
         }
 
-        Exam exam = examRepository.findByIdWithQuestions(sheet.getExam().getId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đề thi!"));
+        Exam exam = loadExamWithQuestionsAndOptions(sheet.getExam().getId());
         sheet.setExam(exam);
 
+        // Giữ bubble overlay + đáp án cũ; chỉ ghi đè câu GV sửa
+        Map<Integer, String> mergedAnswers = new LinkedHashMap<>();
+        Map<Integer, String> preservedBubbles = new HashMap<>();
+        if (sheet.getAnswerDetails() != null) {
+            for (OmrAnswerDetail detail : sheet.getAnswerDetails()) {
+                if (detail.getChosen() != null) {
+                    mergedAnswers.put(detail.getQuestionNumber(), detail.getChosen());
+                }
+                if (detail.getBubbleJson() != null && !detail.getBubbleJson().isBlank()) {
+                    preservedBubbles.put(detail.getQuestionNumber(), detail.getBubbleJson());
+                }
+            }
+        }
+        if (request.getAnswers() != null) {
+            mergedAnswers.putAll(request.getAnswers());
+        }
+
         OmrGradingService.GradingOutcome outcome = omrGradingService.regradeManual(
-                exam, sheet.getDetectedExamCode(), request.getAnswers());
+                exam, sheet.getDetectedExamCode(), mergedAnswers, preservedBubbles);
 
         applyGradingOutcome(sheet, outcome, false);
         syncSubmission(sheet, outcome);
@@ -153,6 +231,9 @@ public class OmrSheetServiceImpl implements OmrSheetService {
 
         String warpedUrl = scan.getImages() != null ? scan.getImages().getWarpedUrl() : null;
         sheet.setWarpedUrl(warpedUrl);
+        if (scan.getImages() != null && scan.getImages().getCloudFolder() != null) {
+            sheet.setCloudFolder(scan.getImages().getCloudFolder());
+        }
 
         String detectedStudentId = scan.getSummary() != null && scan.getSummary().getStudentId() != null
                 ? scan.getSummary().getStudentId()
@@ -164,52 +245,61 @@ public class OmrSheetServiceImpl implements OmrSheetService {
         sheet.setDetectedStudentId(detectedStudentId);
         sheet.setDetectedExamCode(detectedExamCode);
 
-        boolean needsReview = false;
-        if (detectedStudentId == null || detectedStudentId.isBlank()
-                || (scan.getSummary() != null && Boolean.FALSE.equals(scan.getSummary().getStudentIdValid()))) {
-            needsReview = true;
+        // Fail-fast: MSSV
+        if (detectedStudentId == null || detectedStudentId.isBlank()) {
+            failSheet(sheet, "Không đọc được mã sinh viên trên phiếu!");
         }
-        if (detectedExamCode == null || detectedExamCode.isBlank()
-                || !examVersionRepository.existsByExamIdAndVersionCode(sheet.getExam().getId(), detectedExamCode)) {
-            needsReview = true;
+        if (scan.getSummary() != null && Boolean.FALSE.equals(scan.getSummary().getStudentIdValid())) {
+            failSheet(sheet, "Mã sinh viên trên phiếu không hợp lệ: " + detectedStudentId);
         }
-
-        User student = null;
-        if (detectedStudentId != null && !detectedStudentId.isBlank()) {
-            student = userRepository.findByStudentCode(detectedStudentId).orElse(null);
-            if (student == null) {
-                needsReview = true;
-            } else {
-                sheet.setStudent(student);
-            }
+        if (scan.getStudentId() != null && Boolean.FALSE.equals(scan.getStudentId().getValid())) {
+            failSheet(sheet, "Mã sinh viên trên phiếu không hợp lệ: " + detectedStudentId);
         }
 
-        if (detectedExamCode == null || !examVersionRepository.existsByExamIdAndVersionCode(
-                sheet.getExam().getId(), detectedExamCode)) {
-            sheet.setStatus(OmrSheetStatus.NEEDS_REVIEW);
-            sheet.setNeedReviewJson(objectMapper.writeValueAsString(
-                    scan.getAnswers() != null ? scan.getAnswers().getNeedReview() : List.of()));
-            omrFileRepository.save(sheet);
-            return toResponse(sheet);
+        User student = resolveStudentInExamClassrooms(sheet.getExam(), detectedStudentId);
+        if (student == null) {
+            failSheet(sheet,
+                    "Không tìm thấy sinh viên mã \"" + detectedStudentId
+                            + "\" trong các lớp được giao đề này!");
+        }
+        sheet.setStudent(student);
+
+        // Fail-fast: mã đề
+        if (detectedExamCode == null || detectedExamCode.isBlank()) {
+            failSheet(sheet, "Không đọc được mã đề trên phiếu!");
+        }
+        if (scan.getSummary() != null && Boolean.FALSE.equals(scan.getSummary().getExamCodeValid())) {
+            failSheet(sheet, "Mã đề trên phiếu không hợp lệ: " + detectedExamCode);
+        }
+        if (scan.getExamCode() != null && Boolean.FALSE.equals(scan.getExamCode().getValid())) {
+            failSheet(sheet, "Mã đề trên phiếu không hợp lệ: " + detectedExamCode);
+        }
+        if (!examVersionRepository.existsByExamIdAndVersionCode(sheet.getExam().getId(), detectedExamCode)) {
+            failSheet(sheet,
+                    "Mã đề \"" + detectedExamCode + "\" không thuộc đề thi này!");
         }
 
         List<Integer> engineNeedReview = scan.getAnswers() != null ? scan.getAnswers().getNeedReview() : null;
         OmrGradingService.GradingOutcome outcome = omrGradingService.grade(
                 sheet.getExam(), detectedExamCode, scan, engineNeedReview);
 
-        if (!outcome.needReview().isEmpty()) {
-            needsReview = true;
-        }
-        for (OmrGradingService.GradedAnswer ga : outcome.answers()) {
-            if (ga.needsReview()) {
-                needsReview = true;
-                break;
-            }
-        }
+        boolean needsReview = !outcome.needReview().isEmpty()
+                || outcome.answers().stream().anyMatch(OmrGradingService.GradedAnswer::needsReview);
 
         applyGradingOutcome(sheet, outcome, needsReview);
         syncSubmission(sheet, outcome);
         return toResponse(sheet);
+    }
+
+    /** Đánh dấu FAILED rồi ném 400 cho Frontend. */
+    private void failSheet(OMRFile sheet, String message) {
+        sheet.setStatus(OmrSheetStatus.FAILED);
+        try {
+            omrFileRepository.save(sheet);
+        } catch (Exception ignored) {
+            // vẫn báo lỗi cho FE
+        }
+        throw new IllegalArgumentException(message);
     }
 
     private void applyGradingOutcome(OMRFile sheet, OmrGradingService.GradingOutcome outcome, boolean needsReview) {
@@ -250,13 +340,15 @@ public class OmrSheetServiceImpl implements OmrSheetService {
         Exam exam = sheet.getExam();
         User student = sheet.getStudent();
 
+        // Cập nhật submission hiện có của SV+đề; chỉ tạo mới nếu chưa có — không nhân bản khi quét lại
         Submission submission = submissionRepository
-                .findByExamAndStudentAndSubmitTimeIsNull(exam, student)
-                .orElseGet(() -> submissionRepository.findAllByStudentIdAndExamIdIn(
-                                student.getId(), List.of(exam.getId())).stream()
-                        .filter(s -> s.getSubmitTime() != null)
-                        .findFirst()
-                        .orElse(null));
+                .findAllByStudentIdAndExamIdIn(student.getId(), List.of(exam.getId()))
+                .stream()
+                .max(Comparator.comparing(
+                        s -> s.getSubmitTime() != null
+                                ? s.getSubmitTime()
+                                : (s.getStartTime() != null ? s.getStartTime() : LocalDateTime.MIN)))
+                .orElse(null);
 
         if (submission == null) {
             submission = Submission.builder()
@@ -264,7 +356,7 @@ public class OmrSheetServiceImpl implements OmrSheetService {
                     .student(student)
                     .attemptNo(1)
                     .versionCode(sheet.getDetectedExamCode())
-                    .startTime(sheet.getUploadTime())
+                    .startTime(sheet.getUploadTime() != null ? sheet.getUploadTime() : LocalDateTime.now())
                     .build();
         }
 
@@ -272,7 +364,7 @@ public class OmrSheetServiceImpl implements OmrSheetService {
         submission.setScore(outcome.score());
         submission.setSubmitTime(LocalDateTime.now());
         if (submission.getStartTime() == null) {
-            submission.setStartTime(sheet.getUploadTime());
+            submission.setStartTime(sheet.getUploadTime() != null ? sheet.getUploadTime() : LocalDateTime.now());
         }
 
         Map<Integer, Long> orderToQuestionId = loadOrderToQuestionId(exam.getId(), sheet.getDetectedExamCode());
@@ -300,6 +392,20 @@ public class OmrSheetServiceImpl implements OmrSheetService {
         submission = submissionRepository.save(submission);
         sheet.setSubmission(submission);
         omrFileRepository.save(sheet);
+    }
+
+    private static String sha256Hex(byte[] bytes) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(bytes);
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 không khả dụng", e);
+        }
     }
 
     private Map<Integer, Long> loadOrderToQuestionId(Long examId, String versionCode) {
@@ -393,6 +499,7 @@ public class OmrSheetServiceImpl implements OmrSheetService {
                 .score(sheet.getScore())
                 .maxScore(sheet.getMaxScore())
                 .warpedUrl(sheet.getWarpedUrl())
+                .cloudFolder(sheet.getCloudFolder())
                 .originalImageUrl(sheet.getFilePath())
                 .needReview(needReview)
                 .answers(answers)

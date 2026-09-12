@@ -24,7 +24,8 @@ public class OmrGradingService {
     public Map<Integer, String> buildAnswerKey(Exam exam, String versionCode) {
         ExamVersion version = examVersionRepository
                 .findByExamIdAndVersionCode(exam.getId(), versionCode)
-                .orElseThrow(() -> new RuntimeException("Mã đề \"" + versionCode + "\" không tồn tại!"));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Mã đề \"" + versionCode + "\" không tồn tại trong đề thi này!"));
 
         List<QuestionMatrix> matrixList = readMatrix(version.getShuffleMatrix());
         matrixList.sort(Comparator.comparingInt(QuestionMatrix::getNewOrder));
@@ -48,18 +49,25 @@ public class OmrGradingService {
             List<Integer> engineNeedReview) {
 
         Map<Integer, String> answerKey = buildAnswerKey(exam, versionCode);
+        Set<Integer> examQuestionNumbers = answerKey.keySet();
+
         Map<String, OmrScanResponse.OmrAnswerItem> items = scan.getAnswers() != null
                 && scan.getAnswers().getItems() != null
                 ? scan.getAnswers().getItems()
                 : Collections.emptyMap();
 
+        Set<Integer> engineReviewInScope = new HashSet<>();
+        if (engineNeedReview != null) {
+            for (Integer q : engineNeedReview) {
+                if (q != null && examQuestionNumbers.contains(q)) {
+                    engineReviewInScope.add(q);
+                }
+            }
+        }
+
         double totalRaw = 0;
         double earnedRaw = 0;
         List<GradedAnswer> graded = new ArrayList<>();
-        Set<Integer> needReview = new LinkedHashSet<>();
-        if (engineNeedReview != null) {
-            needReview.addAll(engineNeedReview);
-        }
 
         Map<Long, Double> rawByQuestionId = new HashMap<>();
         if (exam.getExamQuestions() != null) {
@@ -76,6 +84,7 @@ public class OmrGradingService {
             orderToQuestionId.put(qm.getNewOrder(), qm.getOriginalQuestionId());
         }
 
+        // Chỉ chấm đúng số câu của đề (answer key), bỏ câu 11..100 từ phiếu mẫu
         for (Map.Entry<Integer, String> entry : answerKey.entrySet()) {
             int questionNum = entry.getKey();
             String correctAnswer = entry.getValue();
@@ -83,7 +92,7 @@ public class OmrGradingService {
 
             String chosen = item != null ? item.getChosen() : null;
             String status = item != null ? item.getStatus() : "BLANK";
-            boolean review = needReview.contains(questionNum);
+            boolean review = engineReviewInScope.contains(questionNum);
             boolean isCorrect = false;
 
             if (chosen == null || chosen.isBlank() || "X".equalsIgnoreCase(chosen)) {
@@ -116,13 +125,22 @@ public class OmrGradingService {
                     questionNum, chosen, correctAnswer, isCorrect, status, bubbleJson, review));
         }
 
+        List<Integer> needReview = graded.stream()
+                .filter(GradedAnswer::needsReview)
+                .map(GradedAnswer::questionNumber)
+                .toList();
+
         double maxScore = exam.getMaxScore() != null ? exam.getMaxScore() : 10.0;
         double score = totalRaw > 0 ? (earnedRaw / totalRaw) * maxScore : 0;
 
-        return new GradingOutcome(score, maxScore, graded, new ArrayList<>(needReview));
+        return new GradingOutcome(score, maxScore, graded, needReview);
     }
 
-    public GradingOutcome regradeManual(Exam exam, String versionCode, Map<Integer, String> manualAnswers) {
+    public GradingOutcome regradeManual(
+            Exam exam,
+            String versionCode,
+            Map<Integer, String> manualAnswers,
+            Map<Integer, String> preservedBubbleJson) {
         Map<Integer, String> answerKey = buildAnswerKey(exam, versionCode);
         double totalRaw = 0;
         double earnedRaw = 0;
@@ -153,8 +171,9 @@ public class OmrGradingService {
             if (isCorrect) {
                 earnedRaw += raw;
             }
+            String bubbleJson = preservedBubbleJson != null ? preservedBubbleJson.get(questionNum) : null;
             graded.add(new GradedAnswer(
-                    questionNum, chosen, correctAnswer, isCorrect, "MANUAL", null, false));
+                    questionNum, chosen, correctAnswer, isCorrect, "MANUAL", bubbleJson, false));
         }
 
         double maxScore = exam.getMaxScore() != null ? exam.getMaxScore() : 10.0;

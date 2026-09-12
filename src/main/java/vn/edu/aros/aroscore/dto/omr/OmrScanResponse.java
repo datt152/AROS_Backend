@@ -38,6 +38,8 @@ public class OmrScanResponse {
     public static class OmrImages {
         @JsonProperty("warped_url")
         private String warpedUrl;
+        @JsonProperty("cloud_folder")
+        private String cloudFolder;
     }
 
     @Data
@@ -54,6 +56,8 @@ public class OmrScanResponse {
         private Map<String, OmrAnswerItem> items;
         @JsonProperty("need_review")
         private List<Integer> needReview;
+        @JsonProperty("column_warnings")
+        private List<String> columnWarnings;
         @JsonProperty("total_questions")
         private Integer totalQuestions;
         @JsonProperty("answered_count")

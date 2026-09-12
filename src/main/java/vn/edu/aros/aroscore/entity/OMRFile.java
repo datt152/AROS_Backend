@@ -28,8 +28,16 @@ public class OMRFile {
     @Column(name = "file_path", nullable = false)
     private String filePath;
 
+    /** SHA-256 nội dung ảnh — chống upload trùng trong cùng phiên chấm. */
+    @Column(name = "content_hash", length = 64)
+    private String contentHash;
+
     @Column(name = "warped_url", length = 500)
     private String warpedUrl;
+
+    /** Folder Cloudinary từ OMR (vd: aros-omr/teachers/12/sessions/45). */
+    @Column(name = "cloud_folder", length = 255)
+    private String cloudFolder;
 
     @Column(name = "upload_time")
     private LocalDateTime uploadTime;
