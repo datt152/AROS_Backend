@@ -13,6 +13,7 @@ import vn.edu.aros.aroscore.repository.UserRepository;
 import vn.edu.aros.aroscore.service.StudentCodeService;
 
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -28,8 +29,13 @@ public class StudentRosterWriter {
     private final StudentCodeService studentCodeService;
 
     public enum Outcome {
+        /** Tạo User mới và thêm vào lớp */
         CREATED,
+        /** Cập nhật thông tin (tên/MSSV); có thể đã ở trong lớp hoặc vừa được thêm */
         UPDATED,
+        /** User có sẵn, thêm vào lớp, không đổi hồ sơ */
+        ENROLLED,
+        /** Đã trong lớp và không có thay đổi hồ sơ */
         SKIPPED
     }
 
@@ -45,17 +51,20 @@ public class StudentRosterWriter {
 
         Optional<User> existingUser = userRepository.findByEmailIgnoreCase(email);
         User user;
-        Outcome outcome;
+        boolean profileChanged;
 
         if (existingUser.isPresent()) {
             user = existingUser.get();
             if (!user.isActive()) {
                 throw new IllegalArgumentException("Sinh viên không còn hoạt động");
             }
+            String prevName = user.getFullName() != null ? user.getFullName().trim() : "";
+            String prevCode = normalizeCode(user.getStudentCode());
             user.setFullName(fullName);
             applyStudentCode(user, codeFromFile, classId);
             userRepository.save(user);
-            outcome = Outcome.UPDATED;
+            String newCode = normalizeCode(user.getStudentCode());
+            profileChanged = !prevName.equals(fullName.trim()) || !Objects.equals(prevCode, newCode);
         } else {
             if (codeFromFile != null
                     && userRepository.existsStudentCodeInClassroom(classId, codeFromFile, null)) {
@@ -69,7 +78,9 @@ public class StudentRosterWriter {
                     .isActive(true)
                     .build();
             user = userRepository.save(user);
-            outcome = Outcome.CREATED;
+            profileChanged = true;
+            enroll(classroom, user, classId);
+            return Outcome.CREATED;
         }
 
         final Long userId = user.getId();
@@ -78,14 +89,22 @@ public class StudentRosterWriter {
         }
         boolean alreadyIn = classroom.getStudents().stream()
                 .anyMatch(s -> s.getId().equals(userId));
+
         if (alreadyIn) {
-            return Outcome.SKIPPED;
+            return profileChanged ? Outcome.UPDATED : Outcome.SKIPPED;
         }
 
+        enroll(classroom, user, classId);
+        return profileChanged ? Outcome.UPDATED : Outcome.ENROLLED;
+    }
+
+    private void enroll(Classroom classroom, User user, Long classId) {
+        if (classroom.getStudents() == null) {
+            classroom.setStudents(new HashSet<>());
+        }
         studentCodeService.assertNoStudentCodeConflictInClassroom(classId, user);
         classroom.getStudents().add(user);
         classroomRepository.save(classroom);
-        return outcome;
     }
 
     private void applyStudentCode(User user, String codeFromFile, Long classId) {
@@ -106,5 +125,12 @@ public class StudentRosterWriter {
                     "Mã sinh viên \"" + codeFromFile + "\" đã được dùng trong lớp này!");
         }
         user.setStudentCode(codeFromFile);
+    }
+
+    private static String normalizeCode(String code) {
+        if (code == null || code.isBlank()) {
+            return null;
+        }
+        return code.trim();
     }
 }

@@ -78,16 +78,19 @@ public class StudentImportServiceImpl implements StudentImportService {
                 StudentRosterWriter.Outcome outcome =
                         studentRosterWriter.upsertAndEnroll(classId, email, fullName, codeFromFile);
 
+                String msg = switch (outcome) {
+                    case CREATED -> "Tạo hồ sơ và thêm vào lớp thành công";
+                    case UPDATED -> "Cập nhật thông tin sinh viên thành công";
+                    case ENROLLED -> "Thêm sinh viên vào lớp thành công";
+                    case SKIPPED -> "Đã có trong lớp";
+                };
+
                 if (outcome == StudentRosterWriter.Outcome.SKIPPED) {
                     skipped++;
-                    successes.add(rowResult(row.rowNumber(), email, fullName, codeFromFile, "Đã có trong lớp - bỏ qua"));
                 } else {
                     success++;
-                    String msg = outcome == StudentRosterWriter.Outcome.CREATED
-                            ? "Tạo hồ sơ mới và thêm vào lớp"
-                            : "Thêm / cập nhật và thêm vào lớp thành công";
-                    successes.add(rowResult(row.rowNumber(), email, fullName, codeFromFile, msg));
                 }
+                successes.add(rowResult(row.rowNumber(), email, fullName, codeFromFile, msg));
             } catch (Exception ex) {
                 failed++;
                 errors.add(StudentImportRowResult.builder()
