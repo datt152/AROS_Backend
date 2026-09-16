@@ -12,9 +12,13 @@ import java.util.Map;
 public class OmrScanResponse {
 
     private Boolean success;
+    /** Legacy field — engine cũ. */
     private String error;
+    @JsonProperty("error_code")
+    private String errorCode;
     private String message;
     private String hint;
+    private Map<String, Object> details;
     @JsonProperty("template_version")
     private String templateVersion;
     private OmrCanvas canvas;

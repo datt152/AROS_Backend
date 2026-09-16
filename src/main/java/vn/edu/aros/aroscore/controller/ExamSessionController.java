@@ -37,8 +37,10 @@ public class ExamSessionController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ExamSessionResponse>> listByExam(@RequestParam Long examId) {
-        return ResponseEntity.ok(examSessionService.listByExam(examId));
+    public ResponseEntity<List<ExamSessionResponse>> listByExam(
+            @RequestParam Long examId,
+            @RequestParam(required = false) Long classroomId) {
+        return ResponseEntity.ok(examSessionService.listByExam(examId, classroomId));
     }
 
     @PatchMapping("/{id}/status")

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.edu.aros.aroscore.dto.request.CreateExamSessionRequest;
 import vn.edu.aros.aroscore.dto.response.ExamSessionResponse;
+import vn.edu.aros.aroscore.entity.Classroom;
 import vn.edu.aros.aroscore.entity.Exam;
 import vn.edu.aros.aroscore.entity.ExamSession;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
@@ -42,8 +43,11 @@ public class ExamSessionServiceImpl implements ExamSessionService {
         }
         omrExamValidator.validateOmrExam(exam);
 
+        Classroom classroom = resolveAssignedClassroom(exam, request.getClassroomId());
+
         ExamSession session = ExamSession.builder()
                 .exam(exam)
+                .classroom(classroom)
                 .name(request.getName())
                 .status(ExamSessionStatus.OPEN)
                 .build();
@@ -58,10 +62,12 @@ public class ExamSessionServiceImpl implements ExamSessionService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ExamSessionResponse> listByExam(Long examId) {
-        return examSessionRepository.findAllByExamIdAndTeacherEmail(examId, currentEmail()).stream()
-                .map(this::toResponse)
-                .toList();
+    public List<ExamSessionResponse> listByExam(Long examId, Long classroomId) {
+        List<ExamSession> sessions = classroomId != null
+                ? examSessionRepository.findAllByExamIdAndClassroomIdAndTeacherEmail(
+                        examId, classroomId, currentEmail())
+                : examSessionRepository.findAllByExamIdAndTeacherEmail(examId, currentEmail());
+        return sessions.stream().map(this::toResponse).toList();
     }
 
     @Override
@@ -72,6 +78,17 @@ public class ExamSessionServiceImpl implements ExamSessionService {
         return toResponse(examSessionRepository.save(session));
     }
 
+    private Classroom resolveAssignedClassroom(Exam exam, Long classroomId) {
+        if (exam.getClassrooms() == null || exam.getClassrooms().isEmpty()) {
+            throw new IllegalArgumentException("Đề OMR chưa được giao cho lớp nào!");
+        }
+        return exam.getClassrooms().stream()
+                .filter(c -> c.getId().equals(classroomId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Lớp không thuộc đề thi này! Chọn lớp đã được giao đề."));
+    }
+
     private ExamSession getOwnedSession(Long id) {
         return examSessionRepository.findByIdAndTeacherEmail(id, currentEmail())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy phiên chấm hoặc bạn không có quyền!"));
@@ -79,10 +96,13 @@ public class ExamSessionServiceImpl implements ExamSessionService {
 
     private ExamSessionResponse toResponse(ExamSession session) {
         int count = omrFileRepository.findByExamSessionIdOrderByUploadTimeDesc(session.getId()).size();
+        Classroom classroom = session.getClassroom();
         return ExamSessionResponse.builder()
                 .id(session.getId())
                 .examId(session.getExam().getId())
                 .examTitle(session.getExam().getTitle())
+                .classroomId(classroom != null ? classroom.getId() : null)
+                .classroomName(classroom != null ? classroom.getClassName() : null)
                 .name(session.getName())
                 .status(session.getStatus())
                 .createdAt(session.getCreatedAt())

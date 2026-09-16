@@ -11,6 +11,9 @@ public class SubmissionRequest {
     @NotNull(message = "ID kỳ thi không được trống")
     private Long examId;
 
+    @NotNull(message = "ID lớp học không được trống")
+    private Long classroomId;
+
     @NotBlank(message = "Mã đề không được trống")
     private String versionCode;
 

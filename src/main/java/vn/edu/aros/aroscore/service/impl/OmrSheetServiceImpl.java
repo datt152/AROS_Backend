@@ -18,7 +18,7 @@ import vn.edu.aros.aroscore.dto.response.OmrSheetResponse;
 import vn.edu.aros.aroscore.entity.*;
 import vn.edu.aros.aroscore.entity.enums.ExamSessionStatus;
 import vn.edu.aros.aroscore.entity.enums.OmrSheetStatus;
-import vn.edu.aros.aroscore.exception.OmrRetakeRequiredException;
+import vn.edu.aros.aroscore.exception.OmrEngineException;
 import vn.edu.aros.aroscore.repository.*;
 import vn.edu.aros.aroscore.service.OmrSheetService;
 import vn.edu.aros.aroscore.service.omr.OmrGradingService;
@@ -69,7 +69,7 @@ public class OmrSheetServiceImpl implements OmrSheetService {
         if (!questionIds.isEmpty()) {
             questionRepository.findByIdInWithOptions(questionIds);
         }
-        // Touch classrooms trong transaction để match MSSV theo lớp
+        // Touch classrooms trong transaction để match MSSV theo lớp phiên / đề
         if (exam.getClassrooms() != null) {
             exam.getClassrooms().size();
         }
@@ -77,16 +77,22 @@ public class OmrSheetServiceImpl implements OmrSheetService {
     }
 
     /**
-     * Match MSSV trong các lớp được giao đề. 0 hoặc >1 kết quả → null (cần review).
+     * Match MSSV trong lớp của phiên chấm (fallback: lớp được giao đề).
      */
-    private User resolveStudentInExamClassrooms(Exam exam, String studentCode) {
-        List<Long> classroomIds = exam.getClassrooms() == null
-                ? List.of()
-                : exam.getClassrooms().stream().map(Classroom::getId).distinct().toList();
-        if (classroomIds.isEmpty()) {
+    private User resolveStudentForSheet(OMRFile sheet, String studentCode) {
+        Long classroomId = null;
+        if (sheet.getExamSession() != null && sheet.getExamSession().getClassroom() != null) {
+            classroomId = sheet.getExamSession().getClassroom().getId();
+        } else if (sheet.getExam() != null && sheet.getExam().getClassrooms() != null) {
+            classroomId = sheet.getExam().getClassrooms().stream()
+                    .map(Classroom::getId)
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (classroomId == null) {
             return null;
         }
-        List<User> matches = userRepository.findByStudentCodeInClassrooms(classroomIds, studentCode);
+        List<User> matches = userRepository.findByStudentCodeInClassrooms(List.of(classroomId), studentCode);
         if (matches.size() == 1) {
             return matches.getFirst();
         }
@@ -151,9 +157,21 @@ public class OmrSheetServiceImpl implements OmrSheetService {
                 throw new RuntimeException("OMR Engine lỗi: " + scanResult.errorMessage());
             }
             return applyScanResult(sheet, scanResult.response());
-        } catch (OmrRetakeRequiredException e) {
-            sheet.setStatus(OmrSheetStatus.RETAKE_REQUIRED);
-            sheet.setOmrRaw(e.getMessage());
+        } catch (OmrEngineException e) {
+            boolean retake = e.getHttpStatus() == 422
+                    || (e.getErrorCode() != null && e.getErrorCode().startsWith("OMR_RET_"));
+            sheet.setStatus(retake ? OmrSheetStatus.RETAKE_REQUIRED : OmrSheetStatus.FAILED);
+            try {
+                sheet.setOmrRaw(objectMapper.writeValueAsString(Map.of(
+                        "success", false,
+                        "error_code", e.getErrorCode(),
+                        "message", e.getMessage() != null ? e.getMessage() : "",
+                        "hint", e.getHint() != null ? e.getHint() : "",
+                        "details", e.getDetails() != null ? e.getDetails() : Map.of()
+                )));
+            } catch (JsonProcessingException ignored) {
+                sheet.setOmrRaw(e.getMessage());
+            }
             omrFileRepository.save(sheet);
             throw e;
         }
@@ -256,11 +274,11 @@ public class OmrSheetServiceImpl implements OmrSheetService {
             failSheet(sheet, "Mã sinh viên trên phiếu không hợp lệ: " + detectedStudentId);
         }
 
-        User student = resolveStudentInExamClassrooms(sheet.getExam(), detectedStudentId);
+        User student = resolveStudentForSheet(sheet, detectedStudentId);
         if (student == null) {
             failSheet(sheet,
                     "Không tìm thấy sinh viên mã \"" + detectedStudentId
-                            + "\" trong các lớp được giao đề này!");
+                            + "\" trong lớp của phiên chấm này!");
         }
         sheet.setStudent(student);
 
@@ -339,10 +357,15 @@ public class OmrSheetServiceImpl implements OmrSheetService {
 
         Exam exam = sheet.getExam();
         User student = sheet.getStudent();
+        Classroom classroom = sheet.getExamSession() != null ? sheet.getExamSession().getClassroom() : null;
+        if (classroom == null) {
+            throw new IllegalArgumentException(
+                    "Phiên chấm chưa gắn lớp — không thể ghi điểm theo lớp. Tạo lại phiên với classroomId.");
+        }
 
-        // Cập nhật submission hiện có của SV+đề; chỉ tạo mới nếu chưa có — không nhân bản khi quét lại
+        // Cập nhật submission theo đề + SV + lớp; quét lại cùng lớp chỉ cập nhật, không nhân bản
         Submission submission = submissionRepository
-                .findAllByStudentIdAndExamIdIn(student.getId(), List.of(exam.getId()))
+                .findAllByStudentIdAndExamIdAndClassroomId(student.getId(), exam.getId(), classroom.getId())
                 .stream()
                 .max(Comparator.comparing(
                         s -> s.getSubmitTime() != null
@@ -354,12 +377,14 @@ public class OmrSheetServiceImpl implements OmrSheetService {
             submission = Submission.builder()
                     .exam(exam)
                     .student(student)
+                    .classroom(classroom)
                     .attemptNo(1)
                     .versionCode(sheet.getDetectedExamCode())
                     .startTime(sheet.getUploadTime() != null ? sheet.getUploadTime() : LocalDateTime.now())
                     .build();
         }
 
+        submission.setClassroom(classroom);
         submission.setVersionCode(sheet.getDetectedExamCode());
         submission.setScore(outcome.score());
         submission.setSubmitTime(LocalDateTime.now());

@@ -20,7 +20,7 @@ public class CustomUserDetailsServiceImpl implements CustomUserDetailsService {
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         // Tìm tài khoản trong Database
         Account account = accountRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("Không tìm thấy tài khoản với username: " + email));
+                .orElseThrow(() -> new UsernameNotFoundException("Thông tin đăng nhập không chính xác"));
 
         // Trả về đối tượng mà Spring Security hiểu được
         return CustomUserDetails.build(account);

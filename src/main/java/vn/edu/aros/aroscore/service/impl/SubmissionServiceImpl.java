@@ -18,6 +18,7 @@ import vn.edu.aros.aroscore.entity.*;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 import vn.edu.aros.aroscore.entity.enums.GradingStatus;
+import vn.edu.aros.aroscore.repository.ClassroomRepository;
 import vn.edu.aros.aroscore.repository.ExamVersionRepository;
 import vn.edu.aros.aroscore.repository.SubmissionRepository;
 import vn.edu.aros.aroscore.repository.UserRepository;
@@ -37,6 +38,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
     private final SubmissionRepository submissionRepository;
     private final ExamVersionRepository examVersionRepository;
+    private final ClassroomRepository classroomRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final UserRepository userRepository;
 
@@ -60,7 +62,16 @@ public class SubmissionServiceImpl implements SubmissionService {
         User student = userRepository.findByEmail(getCurrentUserEmail())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin học sinh"));
 
-        Submission submission = submissionRepository.findByExamAndStudentAndSubmitTimeIsNull(exam, student)
+        Classroom classroom = classroomRepository.findById(request.getClassroomId())
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy lớp học!"));
+        boolean assigned = exam.getClassrooms() != null
+                && exam.getClassrooms().stream().anyMatch(c -> c.getId().equals(classroom.getId()));
+        if (!assigned) {
+            throw new IllegalArgumentException("Lớp không thuộc đề thi này!");
+        }
+
+        Submission submission = submissionRepository
+                .findByExamAndStudentAndClassroomAndSubmitTimeIsNull(exam, student, classroom)
                 .orElseThrow(() -> new RuntimeException(
                         "Bạn chưa bắt đầu bài thi. Hãy gọi API take trước khi nộp bài!"));
 
@@ -151,6 +162,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         return SubmissionResponse.builder()
                 .submissionId(submission.getId())
+                .classroomId(classroom.getId())
                 .attemptNo(submission.getAttemptNo())
                 .totalScore(scoreVisible ? finalScore : null)
                 .maxScore(scoreVisible ? exam.getMaxScore() : null)
@@ -268,6 +280,8 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .submissionId(submission.getId())
                 .examId(exam.getId())
                 .examTitle(exam.getTitle())
+                .classroomId(submission.getClassroom() != null ? submission.getClassroom().getId() : null)
+                .classroomName(submission.getClassroom() != null ? submission.getClassroom().getClassName() : null)
                 .versionCode(submission.getVersionCode())
                 .studentId(student.getId())
                 .fullName(student.getFullName())
@@ -294,6 +308,8 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .submissionId(submission.getId())
                 .examId(exam.getId())
                 .examTitle(exam.getTitle())
+                .classroomId(submission.getClassroom() != null ? submission.getClassroom().getId() : null)
+                .classroomName(submission.getClassroom() != null ? submission.getClassroom().getClassName() : null)
                 .purpose(exam.getPurpose())
                 .versionCode(submission.getVersionCode())
                 .attemptNo(submission.getAttemptNo())

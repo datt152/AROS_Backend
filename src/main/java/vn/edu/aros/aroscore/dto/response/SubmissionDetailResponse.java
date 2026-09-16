@@ -17,6 +17,8 @@ public class SubmissionDetailResponse {
     private Long submissionId;
     private Long examId;
     private String examTitle;
+    private Long classroomId;
+    private String classroomName;
     private String versionCode;
     private Long studentId;
     private String fullName;

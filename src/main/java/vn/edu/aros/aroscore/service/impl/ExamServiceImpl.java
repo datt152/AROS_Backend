@@ -226,14 +226,16 @@ public class ExamServiceImpl implements ExamService {
         }
     }
 
-    private void assertStudentCanTake(Exam exam, User student) {
+    private void assertStudentCanTake(Exam exam, User student, Classroom classroom) {
         if (exam.getClassrooms() == null || exam.getClassrooms().isEmpty()) {
             throw new RuntimeException("Đề thi chưa được giao cho lớp nào!");
         }
-        Set<Long> classroomIds = exam.getClassrooms().stream()
-                .map(Classroom::getId)
-                .collect(Collectors.toSet());
-        if (!classroomRepository.isStudentInAnyClassroom(classroomIds, student.getId())) {
+        boolean assigned = exam.getClassrooms().stream()
+                .anyMatch(c -> c.getId().equals(classroom.getId()));
+        if (!assigned) {
+            throw new RuntimeException("Đề thi chưa được giao cho lớp này!");
+        }
+        if (!classroomRepository.isStudentInAnyClassroom(List.of(classroom.getId()), student.getId())) {
             throw new RuntimeException("Bạn không thuộc lớp được giao đề thi này!");
         }
     }
@@ -495,7 +497,7 @@ public class ExamServiceImpl implements ExamService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy lớp học!"));
 
         Map<Long, Submission> byStudentId = new HashMap<>();
-        for (Submission submission : submissionRepository.findAllByExamIdWithStudent(examId)) {
+        for (Submission submission : submissionRepository.findAllByExamIdAndClassroomIdWithStudent(examId, classroomId)) {
             putPreferredSubmission(byStudentId, submission);
         }
 
@@ -626,7 +628,10 @@ public class ExamServiceImpl implements ExamService {
         }
 
         Map<Long, Submission> byStudentId = new HashMap<>();
-        for (Submission submission : submissionRepository.findAllByExamIdWithStudent(examId)) {
+        List<Submission> scopedSubs = classroomId != null
+                ? submissionRepository.findAllByExamIdAndClassroomIdWithStudent(examId, classroomId)
+                : submissionRepository.findAllByExamIdWithStudent(examId);
+        for (Submission submission : scopedSubs) {
             putPreferredSubmission(byStudentId, submission);
         }
 
@@ -666,7 +671,7 @@ public class ExamServiceImpl implements ExamService {
         }
 
         List<ScoreBucketResponse> distribution = buildScoreDistribution(scores);
-        List<QuestionStatsResponse> questionStats = buildQuestionStats(exam, scopedStudentIds);
+        List<QuestionStatsResponse> questionStats = buildQuestionStats(exam, scopedStudentIds, classroomId);
 
         return ExamStatsResponse.builder()
                 .examId(exam.getId())
@@ -725,14 +730,17 @@ public class ExamServiceImpl implements ExamService {
         return Math.round(value * 100.0) / 100.0;
     }
 
-    private List<QuestionStatsResponse> buildQuestionStats(Exam exam, Set<Long> scopedStudentIds) {
+    private List<QuestionStatsResponse> buildQuestionStats(
+            Exam exam, Set<Long> scopedStudentIds, Long classroomId) {
         List<ExamQuestion> examQuestions = exam.getExamQuestions() == null
                 ? Collections.emptyList()
                 : exam.getExamQuestions().stream()
                 .sorted(Comparator.comparing(ExamQuestion::getQuestionOrder, Comparator.nullsLast(Integer::compareTo)))
                 .toList();
 
-        List<Submission> submitted = submissionRepository.findSubmittedWithDetailsByExamId(exam.getId());
+        List<Submission> submitted = classroomId != null
+                ? submissionRepository.findSubmittedWithDetailsByExamIdAndClassroomId(exam.getId(), classroomId)
+                : submissionRepository.findSubmittedWithDetailsByExamId(exam.getId());
         if (!scopedStudentIds.isEmpty()) {
             submitted = submitted.stream()
                     .filter(s -> scopedStudentIds.contains(s.getStudent().getId()))
@@ -900,7 +908,7 @@ public class ExamServiceImpl implements ExamService {
     @Override
     @Transactional
     @SneakyThrows
-    public ExamTakeResponse takeExam(Long examId) {
+    public ExamTakeResponse takeExam(Long examId, Long classroomId) {
         Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đề thi với ID: " + examId));
 
@@ -909,14 +917,17 @@ public class ExamServiceImpl implements ExamService {
         User student = userRepository.findByEmail(getCurrentUserEmail())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin học sinh"));
 
-        assertStudentCanTake(exam, student);
+        Classroom classroom = classroomRepository.findById(classroomId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy lớp học!"));
+        assertStudentCanTake(exam, student, classroom);
 
         List<ExamVersion> versions = examVersionRepository.findByExamId(examId);
         if (versions.isEmpty()) {
             throw new RuntimeException("Bài thi chưa được tạo mã đề!");
         }
 
-        Submission draft = submissionRepository.findByExamAndStudentAndSubmitTimeIsNull(exam, student)
+        Submission draft = submissionRepository
+                .findByExamAndStudentAndClassroomAndSubmitTimeIsNull(exam, student, classroom)
                 .orElse(null);
         ExamVersion assignedVersion;
 
@@ -925,7 +936,8 @@ public class ExamServiceImpl implements ExamService {
                     .findByExamIdAndVersionCode(examId, draft.getVersionCode())
                     .orElseThrow(() -> new RuntimeException("Mã đề đã gán không còn tồn tại!"));
         } else {
-            long submittedCount = submissionRepository.countByExamAndStudentAndSubmitTimeIsNotNull(exam, student);
+            long submittedCount = submissionRepository
+                    .countByExamAndStudentAndClassroomAndSubmitTimeIsNotNull(exam, student, classroom);
             Integer maxAttempts = effectiveMaxAttempts(exam);
             if (maxAttempts != null && submittedCount >= maxAttempts) {
                 throw new RuntimeException(exam.getPurpose() == ExamPurpose.PRACTICE
@@ -934,10 +946,11 @@ public class ExamServiceImpl implements ExamService {
             }
 
             assignedVersion = versions.get(new java.util.Random().nextInt(versions.size()));
-            int nextAttempt = submissionRepository.findMaxAttemptNo(exam, student) + 1;
+            int nextAttempt = submissionRepository.findMaxAttemptNo(exam, student, classroom) + 1;
             draft = Submission.builder()
                     .exam(exam)
                     .student(student)
+                    .classroom(classroom)
                     .attemptNo(nextAttempt)
                     .versionCode(assignedVersion.getVersionCode())
                     .startTime(LocalDateTime.now())
@@ -991,6 +1004,8 @@ public class ExamServiceImpl implements ExamService {
         ExamConfig config = exam.getConfig();
         return ExamTakeResponse.builder()
                 .examId(exam.getId())
+                .classroomId(classroom.getId())
+                .classroomName(classroom.getClassName())
                 .title(exam.getTitle())
                 .purpose(exam.getPurpose())
                 .duration(exam.getDuration())
@@ -1022,14 +1037,20 @@ public class ExamServiceImpl implements ExamService {
         Map<Long, List<Submission>> byExamId = new HashMap<>();
         if (!examIds.isEmpty()) {
             for (Submission s : submissionRepository.findAllByStudentIdAndExamIdIn(student.getId(), examIds)) {
+                if (classroomId != null
+                        && (s.getClassroom() == null || !classroomId.equals(s.getClassroom().getId()))) {
+                    continue;
+                }
                 byExamId.computeIfAbsent(s.getExam().getId(), k -> new ArrayList<>()).add(s);
             }
         }
 
-        return page.map(exam -> toStudentExamItem(exam, byExamId.getOrDefault(exam.getId(), List.of())));
+        return page.map(exam -> toStudentExamItem(
+                exam, classroomId, byExamId.getOrDefault(exam.getId(), List.of())));
     }
 
-    private StudentExamItemResponse toStudentExamItem(Exam exam, List<Submission> submissions) {
+    private StudentExamItemResponse toStudentExamItem(
+            Exam exam, Long classroomId, List<Submission> submissions) {
         Submission preferred = null;
         for (Submission s : submissions) {
             if (preferred == null || preferSubmission(s, preferred)) {
@@ -1058,7 +1079,6 @@ public class ExamServiceImpl implements ExamService {
         boolean canTake = false;
         if (examOpen) {
             if (preferred != null && preferred.getSubmitTime() == null) {
-                // Có draft: chỉ resume khi chưa hết giờ (khớp takeExam)
                 canTake = myStatus == GradingStatus.IN_PROGRESS;
             } else {
                 canTake = maxAttempts == null || attemptsUsed < maxAttempts;
@@ -1070,8 +1090,24 @@ public class ExamServiceImpl implements ExamService {
             score = preferred.getScore();
         }
 
+        String classroomName = null;
+        Long resolvedClassroomId = classroomId;
+        if (resolvedClassroomId == null && preferred != null && preferred.getClassroom() != null) {
+            resolvedClassroomId = preferred.getClassroom().getId();
+            classroomName = preferred.getClassroom().getClassName();
+        } else if (resolvedClassroomId != null && exam.getClassrooms() != null) {
+            final Long classroomIdForLookup = resolvedClassroomId;
+            classroomName = exam.getClassrooms().stream()
+                    .filter(c -> c.getId().equals(classroomIdForLookup))
+                    .map(Classroom::getClassName)
+                    .findFirst()
+                    .orElse(null);
+        }
+
         return StudentExamItemResponse.builder()
                 .examId(exam.getId())
+                .classroomId(resolvedClassroomId)
+                .classroomName(classroomName)
                 .title(exam.getTitle())
                 .purpose(exam.getPurpose())
                 .examMode(exam.getExamMode())

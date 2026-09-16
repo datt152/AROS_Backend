@@ -17,6 +17,8 @@ public class StudentSubmissionItemResponse {
     private Long submissionId;
     private Long examId;
     private String examTitle;
+    private Long classroomId;
+    private String classroomName;
     private ExamPurpose purpose;
     private String versionCode;
     private Integer attemptNo;

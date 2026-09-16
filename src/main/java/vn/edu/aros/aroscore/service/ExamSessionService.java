@@ -12,7 +12,7 @@ public interface ExamSessionService {
 
     ExamSessionResponse getSession(Long id);
 
-    List<ExamSessionResponse> listByExam(Long examId);
+    List<ExamSessionResponse> listByExam(Long examId, Long classroomId);
 
     ExamSessionResponse updateStatus(Long id, ExamSessionStatus status);
 }

@@ -142,7 +142,9 @@ public class ExamController {
 
     @GetMapping("/{id}/take")
 //    @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<ExamTakeResponse> takeExam(@PathVariable Long id) {
-        return ResponseEntity.ok(examService.takeExam(id));
+    public ResponseEntity<ExamTakeResponse> takeExam(
+            @PathVariable Long id,
+            @RequestParam Long classroomId) {
+        return ResponseEntity.ok(examService.takeExam(id, classroomId));
     }
 }

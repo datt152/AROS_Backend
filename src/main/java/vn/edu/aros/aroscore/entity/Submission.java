@@ -8,7 +8,9 @@ import java.util.List;
 
 @Entity
 @Table(name = "submissions", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_submission_exam_student_attempt", columnNames = {"exam_id", "student_id", "attempt_no"})
+        @UniqueConstraint(
+                name = "uk_submission_exam_student_classroom_attempt",
+                columnNames = {"exam_id", "student_id", "classroom_id", "attempt_no"})
 })
 @Getter
 @Setter
@@ -28,6 +30,10 @@ public class Submission {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_id", nullable = false)
     private User student;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "classroom_id", nullable = false)
+    private Classroom classroom;
 
     /** Lần làm thứ mấy (1-based). Kỳ thi thường = 1; PRACTICE có thể > 1. */
     @Column(name = "attempt_no", nullable = false)

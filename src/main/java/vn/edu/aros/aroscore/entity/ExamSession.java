@@ -23,6 +23,11 @@ public class ExamSession {
     @JoinColumn(name = "exam_id", nullable = false)
     private Exam exam;
 
+    /** Lớp đang chấm trong phiên (OMR: bắt buộc, phải thuộc đề). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "classroom_id")
+    private Classroom classroom;
+
     @Column(nullable = false)
     private String name;
 

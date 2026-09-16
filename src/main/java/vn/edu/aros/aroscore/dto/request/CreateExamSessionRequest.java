@@ -10,6 +10,9 @@ public class CreateExamSessionRequest {
     @NotNull(message = "examId không được để trống")
     private Long examId;
 
+    @NotNull(message = "classroomId không được để trống")
+    private Long classroomId;
+
     @NotBlank(message = "Tên phiên chấm không được để trống")
     private String name;
 }

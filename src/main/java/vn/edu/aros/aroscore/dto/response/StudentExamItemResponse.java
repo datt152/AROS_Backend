@@ -17,6 +17,8 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class StudentExamItemResponse {
     private Long examId;
+    private Long classroomId;
+    private String classroomName;
     private String title;
     private ExamPurpose purpose;
     private ExamMode examMode;

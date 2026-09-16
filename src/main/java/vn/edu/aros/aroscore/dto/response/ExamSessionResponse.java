@@ -16,6 +16,8 @@ public class ExamSessionResponse {
     private Long id;
     private Long examId;
     private String examTitle;
+    private Long classroomId;
+    private String classroomName;
     private String name;
     private ExamSessionStatus status;
     private LocalDateTime createdAt;

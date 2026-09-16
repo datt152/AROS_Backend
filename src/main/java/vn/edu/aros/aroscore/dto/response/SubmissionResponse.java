@@ -7,6 +7,7 @@ import lombok.Data;
 @Builder
 public class SubmissionResponse {
     private Long submissionId;
+    private Long classroomId;
     private Integer attemptNo;
     private Double totalScore;
     private Double maxScore;

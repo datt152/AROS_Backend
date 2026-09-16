@@ -36,6 +36,8 @@ public interface OMRFileRepository extends JpaRepository<OMRFile, Long> {
             LEFT JOIN FETCH f.student
             JOIN FETCH f.exam e
             JOIN FETCH e.teacher
+            LEFT JOIN FETCH f.examSession es
+            LEFT JOIN FETCH es.classroom
             WHERE f.id = :id
             """)
     Optional<OMRFile> findByIdWithDetails(@Param("id") Long id);

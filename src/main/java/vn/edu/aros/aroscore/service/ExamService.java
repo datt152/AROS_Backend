@@ -36,7 +36,7 @@ public interface ExamService {
     @Transactional
     void deleteExam(Long id);
 
-    ExamTakeResponse takeExam(Long examId);
+    ExamTakeResponse takeExam(Long examId, Long classroomId);
 
     @Transactional
     ExamResponse assignClassrooms(Long examId, AssignExamClassroomsRequest request);

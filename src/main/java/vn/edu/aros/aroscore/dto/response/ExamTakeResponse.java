@@ -10,6 +10,8 @@ import java.util.List;
 @Builder
 public class ExamTakeResponse {
     private Long examId;
+    private Long classroomId;
+    private String classroomName;
     private String title;
     private ExamPurpose purpose;
     private Integer duration;
