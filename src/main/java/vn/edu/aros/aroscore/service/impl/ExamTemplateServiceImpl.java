@@ -11,6 +11,7 @@ import vn.edu.aros.aroscore.dto.request.ExamTemplateCreateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamTemplateUpdateRequest;
 import vn.edu.aros.aroscore.dto.request.OnlineExamSettingsRequest;
 import vn.edu.aros.aroscore.dto.request.PaperExamSettingsRequest;
+import vn.edu.aros.aroscore.dto.request.TopicSelectionRequest;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTemplateResponse;
 import vn.edu.aros.aroscore.dto.response.OnlineExamSettingsResponse;
@@ -20,11 +21,14 @@ import vn.edu.aros.aroscore.entity.enums.ExamMode;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 import vn.edu.aros.aroscore.entity.enums.QuestionType;
+import vn.edu.aros.aroscore.entity.enums.TemplateSelectionMode;
 import vn.edu.aros.aroscore.mapper.ExamMapper;
 import vn.edu.aros.aroscore.repository.*;
 import vn.edu.aros.aroscore.service.ExamTemplateService;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -41,6 +45,7 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
     private final ExamRepository examRepository;
     private final SubjectRepository subjectRepository;
     private final QuestionRepository questionRepository;
+    private final TopicRepository topicRepository;
     private final UserRepository userRepository;
     private final ClassroomRepository classroomRepository;
     private final ExamMapper examMapper;
@@ -63,7 +68,8 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         Subject subject = subjectRepository.findActiveByIdAndLecturerEmail(request.getSubjectId(), email)
                 .orElseThrow(() -> new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền!"));
 
-        List<Question> questions = loadAndValidateQuestions(request.getQuestionIds(), subject.getId(), null);
+        List<Long> questionIds = resolveQuestionIds(request, subject.getId(), email);
+        List<Question> questions = loadAndValidateQuestions(questionIds, subject.getId(), null);
 
         ExamTemplate template = ExamTemplate.builder()
                 .title(request.getTitle())
@@ -73,7 +79,7 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
                 .build();
 
         int order = 1;
-        for (Long questionId : request.getQuestionIds()) {
+        for (Long questionId : questionIds) {
             Question q = questions.stream().filter(x -> x.getId().equals(questionId)).findFirst().orElseThrow();
             Double raw = 1.0;
             if (request.getRawPoints() != null && request.getRawPoints().containsKey(questionId)) {
@@ -83,6 +89,111 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         }
 
         return toResponse(examTemplateRepository.save(template));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ExamTemplateResponse previewTemplate(ExamTemplateCreateRequest request) {
+        String email = getCurrentUserEmail();
+        Subject subject = subjectRepository.findActiveByIdAndLecturerEmail(request.getSubjectId(), email)
+                .orElseThrow(() -> new RuntimeException("Môn học không tồn tại hoặc bạn không có quyền!"));
+
+        List<Long> questionIds = resolveQuestionIds(request, subject.getId(), email);
+        loadAndValidateQuestions(questionIds, subject.getId(), null);
+
+        Map<Long, Double> rawPoints = new HashMap<>();
+        for (Long questionId : questionIds) {
+            Double raw = 1.0;
+            if (request.getRawPoints() != null && request.getRawPoints().containsKey(questionId)) {
+                raw = request.getRawPoints().get(questionId);
+            }
+            rawPoints.put(questionId, raw);
+        }
+
+        return ExamTemplateResponse.builder()
+                .title(request.getTitle())
+                .subjectId(subject.getId())
+                .subjectName(subject.getSubjectName())
+                .teacherEmail(email)
+                .totalQuestions(questionIds.size())
+                .questionIds(questionIds)
+                .rawPoints(rawPoints)
+                .isActive(true)
+                .build();
+    }
+
+    private List<Long> resolveQuestionIds(ExamTemplateCreateRequest request, Long subjectId, String email) {
+        TemplateSelectionMode mode = request.getSelectionMode() != null
+                ? request.getSelectionMode()
+                : TemplateSelectionMode.MANUAL;
+
+        if (mode == TemplateSelectionMode.BY_TOPIC) {
+            return pickQuestionsByTopic(request.getTopicSelections(), subjectId, email);
+        }
+
+        if (request.getQuestionIds() == null || request.getQuestionIds().isEmpty()) {
+            throw new IllegalArgumentException("Danh sách câu hỏi rỗng");
+        }
+        return request.getQuestionIds();
+    }
+
+    private List<Long> pickQuestionsByTopic(
+            List<TopicSelectionRequest> topicSelections,
+            Long subjectId,
+            String email) {
+        if (topicSelections == null || topicSelections.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng chọn danh sách chủ đề");
+        }
+
+        Set<Long> seenTopicIds = new HashSet<>();
+        List<Long> pickedIds = new ArrayList<>();
+        Set<Long> pickedSet = new HashSet<>();
+
+        for (TopicSelectionRequest sel : topicSelections) {
+            if (sel.getTopicId() == null || sel.getCount() == null) {
+                throw new IllegalArgumentException("Mỗi chủ đề phải có mã chủ đề và số lượng câu hỏi!");
+            }
+            if (sel.getCount() < 1) {
+                throw new IllegalArgumentException("Số câu của mỗi topic phải lớn hơn 1!");
+            }
+            if (!seenTopicIds.add(sel.getTopicId())) {
+                throw new IllegalArgumentException(
+                        "Mã chủ đề " + sel.getTopicId() + " bị trùng trong danh sách được chọn!");
+            }
+
+            Topic topic = topicRepository.findActiveByIdAndLecturerEmail(sel.getTopicId(), email)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Không tìm thấy chủ đề hoặc bạn không có quyền!"));
+            if (!topic.getSubject().getId().equals(subjectId)) {
+                throw new IllegalArgumentException(
+                        "Chủ đề không thuộc môn học đã chọn!");
+            }
+
+            List<Question> pool = questionRepository.findActiveByTopicSubjectAndTeacher(
+                    topic.getId(), subjectId, email);
+            // Loại câu đã chọn ở topic khác (phòng trường hợp dữ liệu lệch topic)
+            List<Question> available = pool.stream()
+                    .filter(q -> !pickedSet.contains(q.getId()))
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            int availableCount = available.size();
+            if (sel.getCount() > availableCount) {
+                throw new IllegalArgumentException(
+                        "Số lượng câu hỏi trong chủ đề không đủ để chọn");
+            }
+
+            Collections.shuffle(available);
+            List<Question> chosen = available.subList(0, sel.getCount());
+            for (Question q : chosen) {
+                pickedIds.add(q.getId());
+                pickedSet.add(q.getId());
+            }
+        }
+
+        if (pickedIds.isEmpty()) {
+            throw new IllegalArgumentException("Tổng số câu sau khi chọn ngẫu nhiên phải lớn hơn 1!");
+        }
+        return pickedIds;
     }
 
     @Override
@@ -211,7 +322,7 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
                     && status != ExamStatus.CLOSED
                     && status != ExamStatus.COMPLETED) {
                 throw new RuntimeException(
-                        "Đề tạo từ template phải ở trạng thái DRAFT. Hãy sinh mã đề rồi đổi status để mở thi!");
+                        "Đề tạo từ template phải ở trạng thái nháp. Hãy sinh mã đề để mở thi!");
             }
             LocalDateTime startAt = onlineSettings.getStartAt();
             LocalDateTime endAt = onlineSettings.getEndAt();
@@ -233,13 +344,13 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         }
         for (Question q : questions) {
             if (Boolean.FALSE.equals(q.getIsActive())) {
-                throw new RuntimeException("Câu hỏi ID " + q.getId() + " đã bị xóa khỏi ngân hàng!");
+                throw new RuntimeException("Câu hỏi đã bị xóa khỏi ngân hàng!");
             }
             if (!q.getSubject().getId().equals(subjectId)) {
-                throw new RuntimeException("Câu hỏi ID " + q.getId() + " không thuộc môn học này!");
+                throw new RuntimeException("Câu hỏi không thuộc môn học này!");
             }
             if (mode == ExamMode.OMR_PAPER && q.getType() == QuestionType.MULTIPLE_CHOICE) {
-                throw new RuntimeException("Đề OMR không được chứa câu hỏi nhiều đáp án (ID: " + q.getId() + ")");
+                throw new RuntimeException("Đề OMR không được chứa câu hỏi nhiều đáp án");
             }
         }
         return questions;
@@ -297,7 +408,7 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         }
         if (request.getMaxAttempts() != null) {
             if (request.getMaxAttempts() < 1) {
-                throw new RuntimeException("Số lần làm bài phải >= 1!");
+                throw new RuntimeException("Số lần làm bài phải lớn hơn 1!");
             }
             settings.setMaxAttempts(request.getMaxAttempts());
         }

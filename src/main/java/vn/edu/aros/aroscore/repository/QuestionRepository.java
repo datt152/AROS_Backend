@@ -36,6 +36,28 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
             """)
     long countActiveByTopicId(@Param("topicId") Long topicId);
 
+    @Query("""
+            SELECT COUNT(q) FROM Question q
+            WHERE q.topic.id = :topicId
+              AND q.teacher.email = :email
+              AND q.isActive = true
+            """)
+    long countActiveByTopicIdAndTeacherEmail(
+            @Param("topicId") Long topicId,
+            @Param("email") String email);
+
+    @Query("""
+            SELECT q FROM Question q
+            WHERE q.topic.id = :topicId
+              AND q.subject.id = :subjectId
+              AND q.teacher.email = :email
+              AND q.isActive = true
+            """)
+    List<Question> findActiveByTopicSubjectAndTeacher(
+            @Param("topicId") Long topicId,
+            @Param("subjectId") Long subjectId,
+            @Param("email") String email);
+
     @Query("SELECT q FROM Question q WHERE q.id = :id AND q.teacher.email = :email AND q.isActive = true")
     Optional<Question> findActiveByIdAndTeacherEmail(@Param("id") Long id, @Param("email") String email);
 

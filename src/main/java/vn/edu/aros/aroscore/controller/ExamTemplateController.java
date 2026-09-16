@@ -29,6 +29,14 @@ public class ExamTemplateController {
         return ResponseEntity.status(HttpStatus.CREATED).body(examTemplateService.createTemplate(request));
     }
 
+
+    @PostMapping("/preview")
+//    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<ExamTemplateResponse> previewTemplate(
+            @Valid @RequestBody ExamTemplateCreateRequest request) {
+        return ResponseEntity.ok(examTemplateService.previewTemplate(request));
+    }
+
     @GetMapping
 //    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Page<ExamTemplateResponse>> getTemplates(

@@ -12,6 +12,8 @@ public interface ExamTemplateService {
 
     ExamTemplateResponse createTemplate(ExamTemplateCreateRequest request);
 
+    ExamTemplateResponse previewTemplate(ExamTemplateCreateRequest request);
+
     ExamTemplateResponse saveExamAsTemplate(Long examId);
 
     Page<ExamTemplateResponse> getTemplates(Long subjectId, Pageable pageable);
