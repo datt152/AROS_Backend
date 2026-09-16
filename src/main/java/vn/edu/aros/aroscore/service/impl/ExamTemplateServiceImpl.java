@@ -7,22 +7,24 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.edu.aros.aroscore.dto.request.CreateExamFromTemplateRequest;
-import vn.edu.aros.aroscore.dto.request.ExamConfigRequest;
 import vn.edu.aros.aroscore.dto.request.ExamTemplateCreateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamTemplateUpdateRequest;
-import vn.edu.aros.aroscore.dto.response.ExamConfigResponse;
+import vn.edu.aros.aroscore.dto.request.OnlineExamSettingsRequest;
+import vn.edu.aros.aroscore.dto.request.PaperExamSettingsRequest;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTemplateResponse;
+import vn.edu.aros.aroscore.dto.response.OnlineExamSettingsResponse;
+import vn.edu.aros.aroscore.dto.response.PaperExamSettingsResponse;
 import vn.edu.aros.aroscore.entity.*;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
-import vn.edu.aros.aroscore.entity.enums.ExamType;
 import vn.edu.aros.aroscore.entity.enums.QuestionType;
 import vn.edu.aros.aroscore.mapper.ExamMapper;
 import vn.edu.aros.aroscore.repository.*;
 import vn.edu.aros.aroscore.service.ExamTemplateService;
 
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -193,9 +195,6 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
                 .subject(template.getSubject())
                 .teacher(template.getTeacher())
                 .maxScore(request.getMaxScore())
-                .status(ExamStatus.DRAFT)
-                .startAt(request.getStartAt())
-                .endAt(request.getEndAt())
                 .classrooms(classrooms)
                 .sourceTemplate(template)
                 .build();
@@ -204,24 +203,25 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
             exam.addQuestion(tq.getQuestion(), tq.getQuestionOrder(), tq.getRawPoint());
         }
 
-        ExamConfig config = buildDefaultConfig(exam, request.getConfig(), ordered.size());
-        exam.setConfig(config);
+        if (request.getExamMode() == ExamMode.ONLINE) {
+            OnlineExamSettings onlineSettings = buildDefaultOnlineSettings(exam, request.getOnlineSettings());
+            // Luôn DRAFT: GV sinh mã đề rồi mới mở thi (giống flow tạo đề thường).
+            ExamStatus status = onlineSettings.getStatus();
+            if (status != ExamStatus.DRAFT
+                    && status != ExamStatus.CLOSED
+                    && status != ExamStatus.COMPLETED) {
+                throw new RuntimeException(
+                        "Đề tạo từ template phải ở trạng thái DRAFT. Hãy sinh mã đề rồi đổi status để mở thi!");
+            }
+            LocalDateTime startAt = onlineSettings.getStartAt();
+            LocalDateTime endAt = onlineSettings.getEndAt();
+            if (startAt != null && endAt != null && endAt.isBefore(startAt)) {
+                throw new RuntimeException("Thời gian kết thúc phải sau thời gian bắt đầu!");
+            }
+            exam.setOnlineSettings(onlineSettings);
+        }
 
-        // Luôn DRAFT: GV sinh mã đề rồi mới mở thi (giống flow tạo đề thường).
-        if (request.getStatus() != null
-                && request.getStatus() != ExamStatus.DRAFT
-                && request.getStatus() != ExamStatus.CLOSED
-                && request.getStatus() != ExamStatus.COMPLETED) {
-            throw new RuntimeException(
-                    "Đề tạo từ template phải ở trạng thái DRAFT. Hãy sinh mã đề rồi đổi status để mở thi!");
-        }
-        if (request.getStatus() != null) {
-            exam.setStatus(request.getStatus());
-        }
-
-        if (exam.getStartAt() != null && exam.getEndAt() != null && exam.getEndAt().isBefore(exam.getStartAt())) {
-            throw new RuntimeException("Thời gian kết thúc phải sau thời gian bắt đầu!");
-        }
+        exam.setPaperSettings(buildDefaultPaperSettings(exam, request.getPaperSettings(), ordered.size()));
 
         return toExamResponse(examRepository.save(exam));
     }
@@ -262,63 +262,84 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         return new HashSet<>(classrooms);
     }
 
-    private ExamType toExamType(ExamMode mode) {
-        return mode == ExamMode.OMR_PAPER ? ExamType.OMR : ExamType.ONLINE;
-    }
-
-    private ExamConfig buildDefaultConfig(Exam exam, ExamConfigRequest request, int questionCount) {
+    private OnlineExamSettings buildDefaultOnlineSettings(Exam exam, OnlineExamSettingsRequest request) {
         boolean practice = exam.getPurpose() == ExamPurpose.PRACTICE;
-        ExamConfig config = ExamConfig.builder()
+        OnlineExamSettings settings = OnlineExamSettings.builder()
                 .exam(exam)
-                .totalQuestions(questionCount)
-                .examType(toExamType(exam.getExamMode()))
-                .shuffleQuestions(true)
-                .shuffleAnswers(true)
-                .paperCount(1)
+                .status(ExamStatus.DRAFT)
                 .allowEdit(true)
                 .showScoreToStudent(true)
                 .maxAttempts(practice ? null : 1)
                 .timeLimitEnabled(!practice)
                 .build();
-        applyConfigRequest(config, request, questionCount, exam.getExamMode());
-        return config;
+        applyOnlineSettingsRequest(settings, request);
+        return settings;
     }
 
-    private void applyConfigRequest(ExamConfig config, ExamConfigRequest request, int questionCount, ExamMode mode) {
-        config.setTotalQuestions(questionCount);
-        config.setExamType(toExamType(mode));
+    private void applyOnlineSettingsRequest(OnlineExamSettings settings, OnlineExamSettingsRequest request) {
         if (request == null) {
             return;
         }
-        if (request.getSemester() != null) {
-            config.setSemester(request.getSemester());
+        if (request.getStatus() != null) {
+            settings.setStatus(request.getStatus());
         }
-        if (request.getAcademicYear() != null) {
-            config.setAcademicYear(request.getAcademicYear());
+        if (request.getStartAt() != null) {
+            settings.setStartAt(request.getStartAt());
         }
-        if (request.getShuffleQuestions() != null) {
-            config.setShuffleQuestions(request.getShuffleQuestions());
-        }
-        if (request.getShuffleAnswers() != null) {
-            config.setShuffleAnswers(request.getShuffleAnswers());
-        }
-        if (request.getPaperCount() != null) {
-            config.setPaperCount(request.getPaperCount());
+        if (request.getEndAt() != null) {
+            settings.setEndAt(request.getEndAt());
         }
         if (request.getAllowEdit() != null) {
-            config.setAllowEdit(request.getAllowEdit());
+            settings.setAllowEdit(request.getAllowEdit());
         }
         if (request.getShowScoreToStudent() != null) {
-            config.setShowScoreToStudent(request.getShowScoreToStudent());
+            settings.setShowScoreToStudent(request.getShowScoreToStudent());
         }
         if (request.getMaxAttempts() != null) {
             if (request.getMaxAttempts() < 1) {
                 throw new RuntimeException("Số lần làm bài phải >= 1!");
             }
-            config.setMaxAttempts(request.getMaxAttempts());
+            settings.setMaxAttempts(request.getMaxAttempts());
         }
         if (request.getTimeLimitEnabled() != null) {
-            config.setTimeLimitEnabled(request.getTimeLimitEnabled());
+            settings.setTimeLimitEnabled(request.getTimeLimitEnabled());
+        }
+    }
+
+    private PaperExamSettings buildDefaultPaperSettings(Exam exam, PaperExamSettingsRequest request, int questionCount) {
+        PaperExamSettings settings = PaperExamSettings.builder()
+                .exam(exam)
+                .totalQuestions(questionCount)
+                .shuffleQuestions(true)
+                .shuffleAnswers(true)
+                .paperCount(1)
+                .build();
+        applyPaperSettingsRequest(settings, request, questionCount);
+        return settings;
+    }
+
+    private void applyPaperSettingsRequest(PaperExamSettings settings, PaperExamSettingsRequest request, int questionCount) {
+        settings.setTotalQuestions(questionCount);
+        if (request == null) {
+            return;
+        }
+        if (request.getExamDate() != null) {
+            settings.setExamDate(request.getExamDate());
+        }
+        if (request.getSemester() != null) {
+            settings.setSemester(request.getSemester());
+        }
+        if (request.getAcademicYear() != null) {
+            settings.setAcademicYear(request.getAcademicYear());
+        }
+        if (request.getShuffleQuestions() != null) {
+            settings.setShuffleQuestions(request.getShuffleQuestions());
+        }
+        if (request.getShuffleAnswers() != null) {
+            settings.setShuffleAnswers(request.getShuffleAnswers());
+        }
+        if (request.getPaperCount() != null) {
+            settings.setPaperCount(request.getPaperCount());
         }
     }
 
@@ -359,21 +380,33 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         } else {
             response.setClassroomIds(List.of());
         }
-        if (exam.getConfig() != null) {
-            ExamConfig c = exam.getConfig();
-            response.setConfig(ExamConfigResponse.builder()
-                    .id(c.getId())
-                    .semester(c.getSemester())
-                    .academicYear(c.getAcademicYear())
-                    .totalQuestions(c.getTotalQuestions())
-                    .examType(c.getExamType())
-                    .shuffleQuestions(c.getShuffleQuestions())
-                    .shuffleAnswers(c.getShuffleAnswers())
-                    .paperCount(c.getPaperCount())
-                    .allowEdit(c.getAllowEdit())
-                    .showScoreToStudent(c.getShowScoreToStudent())
-                    .maxAttempts(c.getMaxAttempts())
-                    .timeLimitEnabled(c.getTimeLimitEnabled())
+        if (exam.getOnlineSettings() != null) {
+            OnlineExamSettings s = exam.getOnlineSettings();
+            response.setOnlineSettings(OnlineExamSettingsResponse.builder()
+                    .id(s.getId())
+                    .status(s.getStatus())
+                    .startAt(s.getStartAt())
+                    .endAt(s.getEndAt())
+                    .allowEdit(s.getAllowEdit())
+                    .showScoreToStudent(s.getShowScoreToStudent())
+                    .maxAttempts(s.getMaxAttempts())
+                    .timeLimitEnabled(s.getTimeLimitEnabled())
+                    .build());
+            response.setStatus(s.getStatus());
+            response.setStartAt(s.getStartAt());
+            response.setEndAt(s.getEndAt());
+        }
+        if (exam.getPaperSettings() != null) {
+            PaperExamSettings p = exam.getPaperSettings();
+            response.setPaperSettings(PaperExamSettingsResponse.builder()
+                    .id(p.getId())
+                    .examDate(p.getExamDate())
+                    .semester(p.getSemester())
+                    .academicYear(p.getAcademicYear())
+                    .totalQuestions(p.getTotalQuestions())
+                    .shuffleQuestions(p.getShuffleQuestions())
+                    .shuffleAnswers(p.getShuffleAnswers())
+                    .paperCount(p.getPaperCount())
                     .build());
         }
         if (exam.getSourceTemplate() != null) {
