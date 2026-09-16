@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import vn.edu.aros.aroscore.entity.Exam;
+import vn.edu.aros.aroscore.entity.enums.ExamMode;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 
@@ -73,4 +74,7 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
             @Param("classroomId") Long classroomId,
             @Param("draft") ExamStatus draft,
             Pageable pageable);
+
+    /** Lớp đã được giao ít nhất một đề OMR. */
+    boolean existsByClassrooms_IdAndExamMode(Long classroomId, ExamMode examMode);
 }

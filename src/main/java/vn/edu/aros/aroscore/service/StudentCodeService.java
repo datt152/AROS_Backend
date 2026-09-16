@@ -3,6 +3,8 @@ package vn.edu.aros.aroscore.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import vn.edu.aros.aroscore.entity.User;
+import vn.edu.aros.aroscore.entity.enums.ExamMode;
+import vn.edu.aros.aroscore.repository.ExamRepository;
 import vn.edu.aros.aroscore.repository.UserRepository;
 import vn.edu.aros.aroscore.utils.StudentCodeRules;
 
@@ -16,10 +18,30 @@ import java.util.List;
 public class StudentCodeService {
 
     private final UserRepository userRepository;
+    private final ExamRepository examRepository;
+
+    /** Lớp đã được giao ≥1 đề OMR → thêm SV bắt buộc có MSSV hợp lệ. */
+    public boolean classroomRequiresStudentCode(Long classroomId) {
+        return examRepository.existsByClassrooms_IdAndExamMode(classroomId, ExamMode.OMR_PAPER);
+    }
+
+    /**
+     * Khi thêm SV vào lớp đã có đề OMR: bắt buộc MSSV 8 số.
+     */
+    public void assertStudentCodeRequiredWhenOmrAssigned(Long classroomId, User student) {
+        if (!classroomRequiresStudentCode(classroomId)) {
+            return;
+        }
+        String code = student.getStudentCode();
+        if (code == null || code.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Lớp đã có đề thi OMR - không thể thêm sinh viên " + student.getEmail());
+        }
+        StudentCodeRules.requireValidOmrFormat(code);
+    }
 
     /**
      * Khi thêm SV vào lớp: nếu SV đã có MSSV thì không được trùng với SV khác trong lớp.
-     * (SV chưa có mã → cho enroll bình thường.)
      */
     public void assertNoStudentCodeConflictInClassroom(Long classroomId, User student) {
         String code = student.getStudentCode();

@@ -137,6 +137,7 @@ public class ClassroomServiceImpl implements ClassroomService {
 
         studentCodeService.assertNoStudentCodeConflictInBatch(toEnroll);
         for (User student : toEnroll) {
+            studentCodeService.assertStudentCodeRequiredWhenOmrAssigned(classId, student);
             studentCodeService.assertNoStudentCodeConflictInClassroom(classId, student);
         }
 

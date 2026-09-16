@@ -102,6 +102,7 @@ public class StudentRosterWriter {
         if (classroom.getStudents() == null) {
             classroom.setStudents(new HashSet<>());
         }
+        studentCodeService.assertStudentCodeRequiredWhenOmrAssigned(classId, user);
         studentCodeService.assertNoStudentCodeConflictInClassroom(classId, user);
         classroom.getStudents().add(user);
         classroomRepository.save(classroom);
