@@ -15,16 +15,19 @@ public class ExamResponse {
     private Integer duration;
     private ExamMode examMode;
     private ExamPurpose purpose;
-    private ExamStatus status;
     private Long subjectId;
     private String subjectName;
     private String teacherEmail;
     private LocalDateTime createdAt;
-    private LocalDateTime startAt;
-    private LocalDateTime endAt;
     private Integer totalQuestions;
     private Double maxScore;
     private List<Long> classroomIds;
-    private ExamConfigResponse config;
+    private OnlineExamSettingsResponse onlineSettings;
+    private PaperExamSettingsResponse paperSettings;
     private Long sourceTemplateId;
+
+    /** Convenience cho FE Online — lấy từ onlineSettings. */
+    private ExamStatus status;
+    private LocalDateTime startAt;
+    private LocalDateTime endAt;
 }

@@ -2,15 +2,14 @@ package vn.edu.aros.aroscore.dto.request;
 
 import lombok.Data;
 
+import java.time.LocalDate;
+
 @Data
-public class ExamConfigRequest {
+public class PaperExamSettingsRequest {
+    private LocalDate examDate;
     private String semester;
     private String academicYear;
     private Boolean shuffleQuestions;
     private Boolean shuffleAnswers;
     private Integer paperCount;
-    private Boolean allowEdit;
-    private Boolean showScoreToStudent;
-    private Integer maxAttempts;
-    private Boolean timeLimitEnabled;
 }

@@ -4,21 +4,19 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import vn.edu.aros.aroscore.entity.enums.ExamType;
+import vn.edu.aros.aroscore.entity.enums.ExamStatus;
+
+import java.time.LocalDateTime;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ExamConfigResponse {
+public class OnlineExamSettingsResponse {
     private Long id;
-    private String semester;
-    private String academicYear;
-    private Integer totalQuestions;
-    private ExamType examType;
-    private Boolean shuffleQuestions;
-    private Boolean shuffleAnswers;
-    private Integer paperCount;
+    private ExamStatus status;
+    private LocalDateTime startAt;
+    private LocalDateTime endAt;
     private Boolean allowEdit;
     private Boolean showScoreToStudent;
     private Integer maxAttempts;

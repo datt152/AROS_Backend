@@ -6,9 +6,6 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
-import vn.edu.aros.aroscore.entity.enums.ExamStatus;
-
-import java.time.LocalDateTime;
 
 @Data
 public class ExamUpdateRequest {
@@ -31,11 +28,7 @@ public class ExamUpdateRequest {
     @NotNull(message = "Thang điểm chuẩn không được để trống (VD: 10.0)")
     private Double maxScore;
 
-    private ExamStatus status;
+    private OnlineExamSettingsRequest onlineSettings;
 
-    private LocalDateTime startAt;
-
-    private LocalDateTime endAt;
-
-    private ExamConfigRequest config;
+    private PaperExamSettingsRequest paperSettings;
 }

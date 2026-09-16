@@ -5,7 +5,6 @@ import jakarta.persistence.*;
 import lombok.*;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
-import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -29,8 +28,9 @@ public class Exam {
     @Column(nullable = false)
     private String title;
 
+    /** Thời gian làm bài (phút) — Online: đếm giờ; OMR: in lên đề. */
     @Column(nullable = false)
-    private Integer duration; // Thời gian làm bài (phút)
+    private Integer duration;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "exam_mode", nullable = false)
@@ -41,17 +41,6 @@ public class Exam {
     @Column(name = "purpose", nullable = false, length = 20)
     @Builder.Default
     private ExamPurpose purpose = ExamPurpose.EXAM;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
-    @Builder.Default
-    private ExamStatus status = ExamStatus.DRAFT;
-
-    @Column(name = "start_at")
-    private LocalDateTime startAt;
-
-    @Column(name = "end_at")
-    private LocalDateTime endAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "subject_id", nullable = false)
@@ -84,29 +73,28 @@ public class Exam {
     private Set<Classroom> classrooms = new HashSet<>();
 
     @OneToOne(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private ExamConfig config;
+    private OnlineExamSettings onlineSettings;
 
-    /** Đề được tạo từ template nào (optional). */
+    @OneToOne(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private PaperExamSettings paperSettings;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "template_id")
     private ExamTemplate sourceTemplate;
-
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-        if (this.status == null) {
-            this.status = ExamStatus.DRAFT;
-        }
-        if (this.purpose == null) {
-            this.purpose = ExamPurpose.EXAM;
-        }
-    }
 
     private String imageUrl;
 
     @Column(name = "max_score", nullable = false)
     @Builder.Default
     private Double maxScore = 10.0;
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+        if (this.purpose == null) {
+            this.purpose = ExamPurpose.EXAM;
+        }
+    }
 
     public void addQuestion(Question question, Integer order, Double rawPoint) {
         ExamQuestion eq = ExamQuestion.builder()
