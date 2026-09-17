@@ -26,6 +26,9 @@ public interface ExamService {
 
     ExamVersionDetailResponse getExamVersionDetail(Long examId, String versionCode) throws JsonProcessingException;
 
+    /** PDF đề thi (tiếng Việt) theo mã đề đã sinh. classroomId tuỳ chọn để in tên lớp. */
+    byte[] downloadExamPaperPdf(Long examId, String versionCode, Long classroomId) throws JsonProcessingException;
+
     Page<ExamResponse> getAllExams(Long classroomId, ExamPurpose purpose, Pageable pageable);
 
     ExamResponse getExamById(Long id);

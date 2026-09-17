@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.edu.aros.aroscore.dto.matrix.AnswerMapping;
 import vn.edu.aros.aroscore.dto.matrix.QuestionMatrix;
+import vn.edu.aros.aroscore.dto.print.ExamPaperPrintModel;
 import vn.edu.aros.aroscore.dto.request.AssignExamClassroomsRequest;
 import vn.edu.aros.aroscore.dto.request.ExamCreateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamUpdateRequest;
@@ -28,9 +29,11 @@ import vn.edu.aros.aroscore.entity.enums.QuestionType;
 import vn.edu.aros.aroscore.mapper.ExamMapper;
 import vn.edu.aros.aroscore.repository.*;
 import vn.edu.aros.aroscore.service.ExamService;
+import vn.edu.aros.aroscore.service.exam.ExamPaperPdfRenderer;
 import vn.edu.aros.aroscore.service.exam.ExamSettingsSupport;
 import vn.edu.aros.aroscore.service.omr.OmrExamValidator;
 
+import java.time.format.DateTimeFormatter;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -57,6 +60,7 @@ public class ExamServiceImpl implements ExamService {
     private final SubmissionRepository submissionRepository;
     private final ClassroomRepository classroomRepository;
     private final OmrExamValidator omrExamValidator;
+    private final ExamPaperPdfRenderer examPaperPdfRenderer;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private String getCurrentUserEmail() {
@@ -487,6 +491,93 @@ public class ExamServiceImpl implements ExamService {
         response.setVersionCode(version.getVersionCode());
         response.setQuestions(questionResponses);
         return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] downloadExamPaperPdf(Long examId, String versionCode, Long classroomId)
+            throws JsonProcessingException {
+        ExamVersionDetailResponse detail = getExamVersionDetail(examId, versionCode);
+        Exam exam = getOwnedExam(examId);
+        PaperExamSettings paper = exam.getPaperSettings();
+
+        String className = resolveClassNameForPrint(exam, classroomId);
+
+        List<ExamPaperPrintModel.QuestionBlock> questions = new ArrayList<>();
+        int order = 1;
+        for (QuestionInVersionResponse q : detail.getQuestions()) {
+            List<ExamPaperPrintModel.OptionBlock> options = q.getOptions() == null
+                    ? List.of()
+                    : q.getOptions().stream()
+                    .map(o -> ExamPaperPrintModel.OptionBlock.builder()
+                            .label(o.getLabel())
+                            .content(o.getContent())
+                            .build())
+                    .toList();
+            questions.add(ExamPaperPrintModel.QuestionBlock.builder()
+                    .order(order++)
+                    .content(q.getContent())
+                    .options(options)
+                    .build());
+        }
+
+        ExamPaperPrintModel model = ExamPaperPrintModel.builder()
+                .orgLine1("TRƯỜNG ĐẠI HỌC CÔNG NGHIỆP")
+                .orgLine2("THÀNH PHỐ HỒ CHÍ MINH")
+                .orgLine3("KHOA")
+                .title(exam.getTitle() != null ? exam.getTitle().toUpperCase() : "")
+                .subjectName(exam.getSubject() != null ? exam.getSubject().getSubjectName() : null)
+                .className(className)
+                .academicYearLabel(formatAcademicYearLabel(
+                        paper != null ? paper.getSemester() : null,
+                        paper != null ? paper.getAcademicYear() : null))
+                .examDate(paper != null && paper.getExamDate() != null
+                        ? paper.getExamDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                        : null)
+                .durationMinutes(exam.getDuration())
+                .versionCode(detail.getVersionCode())
+                .questions(questions)
+                .build();
+
+        return examPaperPdfRenderer.render(model);
+    }
+
+    private String resolveClassNameForPrint(Exam exam, Long classroomId) {
+        if (exam.getClassrooms() == null || exam.getClassrooms().isEmpty()) {
+            return null;
+        }
+        if (classroomId != null) {
+            return exam.getClassrooms().stream()
+                    .filter(c -> c.getId().equals(classroomId))
+                    .map(Classroom::getClassName)
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Lớp ID " + classroomId + " không được giao đề này!"));
+        }
+        if (exam.getClassrooms().size() == 1) {
+            return exam.getClassrooms().iterator().next().getClassName();
+        }
+        // Nhiều lớp: FE nên truyền classroomId; tạm lấy lớp đầu theo tên.
+        return exam.getClassrooms().stream()
+                .sorted(Comparator.comparing(Classroom::getClassName, Comparator.nullsLast(String::compareTo)))
+                .map(Classroom::getClassName)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String formatAcademicYearLabel(String semester, String academicYear) {
+        boolean hasSemester = semester != null && !semester.isBlank();
+        boolean hasYear = academicYear != null && !academicYear.isBlank();
+        if (hasSemester && hasYear) {
+            return semester.trim() + " " + academicYear.trim();
+        }
+        if (hasSemester) {
+            return semester.trim();
+        }
+        if (hasYear) {
+            return academicYear.trim();
+        }
+        return null;
     }
 
     @Override

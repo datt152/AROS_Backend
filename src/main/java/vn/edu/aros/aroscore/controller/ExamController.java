@@ -6,7 +6,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import vn.edu.aros.aroscore.dto.request.AssignExamClassroomsRequest;
@@ -25,6 +27,8 @@ import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.service.ExamService;
 import vn.edu.aros.aroscore.service.ExamTemplateService;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -59,6 +63,28 @@ public class ExamController {
             @PathVariable Long examId,
             @PathVariable String versionCode) throws JsonProcessingException {
         return ResponseEntity.ok(examService.getExamVersionDetail(examId, versionCode));
+    }
+
+    /**
+     * Tải PDF nội dung đề thi (tiếng Việt) theo mã đề đã sinh.
+     * FE có thể gọi /pdf hoặc /download.
+     */
+    @GetMapping({
+            "/{examId}/versions/{versionCode}/pdf",
+            "/{examId}/versions/{versionCode}/download"
+    })
+//    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<byte[]> downloadExamPaper(
+            @PathVariable Long examId,
+            @PathVariable String versionCode,
+            @RequestParam(required = false) Long classroomId) throws JsonProcessingException {
+        byte[] pdf = examService.downloadExamPaperPdf(examId, versionCode, classroomId);
+        String filename = "De_thi_ma_" + versionCode + ".pdf";
+        String encoded = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"; filename*=UTF-8''" + encoded)
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
     }
 
     @GetMapping("/my")

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="vi">
+<head>
+    <meta charset="UTF-8"/>
+    <title th:text="${paper.title}">Đề thi</title>
+    <style>
+        @page { size: A4; margin: 16mm 14mm; }
+        body {
+            font-family: 'TimesNewRoman', 'Times New Roman', serif;
+            font-size: 12pt;
+            line-height: 1.4;
+            color: #000;
+        }
+        .top {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+        .top td {
+            width: 50%;
+            vertical-align: top;
+            padding: 0 6px;
+        }
+        .org {
+            text-align: center;
+            font-size: 11pt;
+            text-transform: uppercase;
+            line-height: 1.35;
+        }
+        .org-line2 {
+            display: inline-block;
+            border-bottom: 1px solid #000;
+            padding-bottom: 1px;
+            margin-bottom: 2px;
+        }
+        .exam-right {
+            text-align: center;
+            line-height: 1.45;
+        }
+        .exam-title {
+            font-size: 13pt;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .exam-meta {
+            text-align: left;
+            font-size: 11.5pt;
+            margin-left: 8px;
+        }
+        .row-time {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8px 0 6px;
+            font-size: 11.5pt;
+        }
+        .row-time td { padding: 0; vertical-align: baseline; }
+        .row-time .left { text-align: left; }
+        .row-time .right { text-align: right; white-space: nowrap; }
+        .version-code {
+            border-bottom: 1px solid #000;
+            padding: 0 2px 1px;
+        }
+        /* Inline 1 hàng — giống trước, chỉ đổi kiểu chấm */
+        .row-student {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            margin: 4px 0 14px;
+            font-size: 11.5pt;
+        }
+        .row-student td {
+            padding: 0;
+            vertical-align: baseline;
+            font-weight: normal;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        .row-student .col-name { width: 70%; padding-right: 10px; }
+        .row-student .col-mssv { width: 30%; }
+        .dots {
+            letter-spacing: 1px;
+        }
+        .question {
+            margin: 0 0 12px;
+            page-break-inside: avoid;
+            font-size: 11.5pt;
+        }
+        .q-head { margin-bottom: 3px; }
+        .option { margin: 1px 0 1px 14px; }
+    </style>
+</head>
+<body>
+
+<table class="top">
+    <tr>
+        <td>
+            <div class="org">
+                <div th:text="${paper.orgLine1}">TRƯỜNG ĐẠI HỌC CÔNG NGHIỆP</div>
+                <div><span class="org-line2" th:text="${paper.orgLine2}">THÀNH PHỐ HỒ CHÍ MINH</span></div>
+                <div th:text="${paper.orgLine3}"></div>
+            </div>
+        </td>
+        <td>
+            <div class="exam-right">
+                <div class="exam-title" th:text="${paper.title}">ĐỀ THI</div>
+                <div class="exam-meta">
+                    <div>
+                        Môn thi:
+                        <span th:text="${paper.subjectName != null ? paper.subjectName : '………………'}">………………</span>
+                    </div>
+                    <div>
+                        Lớp:
+                        <span th:text="${paper.className != null ? paper.className : '………………'}">………………</span>
+                    </div>
+                    <div>
+                        Năm học:
+                        <span th:text="${paper.academicYearLabel != null ? paper.academicYearLabel : '………………'}">………………</span>
+                    </div>
+                    <div>
+                        Ngày thi:
+                        <span th:text="${paper.examDate != null ? paper.examDate : '………………'}">………………</span>
+                    </div>
+                </div>
+            </div>
+        </td>
+    </tr>
+</table>
+
+<table class="row-time">
+    <tr>
+        <td class="left">
+            Thời gian làm bài:
+            <span th:text="${paper.durationMinutes}">60</span> phút
+            (Không kể thời gian phát đề)
+        </td>
+        <td class="right">
+            Đề: <span class="version-code" th:text="${paper.versionCode}">A</span>
+        </td>
+    </tr>
+</table>
+
+<table class="row-student">
+    <tr>
+        <td class="col-name">Họ và tên thí sinh: <span class="dots">.................................................................</span></td>
+        <td class="col-mssv">Mã số sinh viên: <span class="dots">................</span></td>
+    </tr>
+</table>
+
+<div class="question" th:each="q : ${paper.questions}">
+    <div class="q-head">
+        Câu <span th:text="${q.order}">1</span>:
+        <span th:text="${q.content}">Nội dung câu hỏi</span>
+    </div>
+    <div class="option" th:each="opt : ${q.options}">
+        <span th:text="${opt.label}">A</span>.
+        <span th:text="${opt.content}">Đáp án</span>
+    </div>
+</div>
+
+</body>
+</html>
