@@ -41,4 +41,14 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> 
             @Param("examId") Long examId,
             @Param("classroomId") Long classroomId,
             @Param("email") String email);
+
+    @Query("""
+            SELECT COUNT(s) FROM ExamSession s
+            WHERE s.exam.teacher.email = :email
+              AND s.exam.examMode = vn.edu.aros.aroscore.entity.enums.ExamMode.OMR_PAPER
+              AND s.status = :status
+            """)
+    long countOmrByTeacherEmailAndStatus(
+            @Param("email") String email,
+            @Param("status") vn.edu.aros.aroscore.entity.enums.ExamSessionStatus status);
 }

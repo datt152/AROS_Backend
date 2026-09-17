@@ -104,4 +104,10 @@ public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
             @Param("studentId") Long studentId,
             @Param("subjectId") Long subjectId,
             Pageable pageable);
+
+    @Query("""
+            SELECT COUNT(c) FROM Classroom c
+            WHERE c.subject.lecturer.email = :email AND c.isActive = true
+            """)
+    long countActiveByLecturerEmail(@Param("email") String email);
 }

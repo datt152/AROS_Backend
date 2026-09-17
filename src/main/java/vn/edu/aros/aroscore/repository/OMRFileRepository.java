@@ -49,4 +49,22 @@ public interface OMRFileRepository extends JpaRepository<OMRFile, Long> {
             WHERE f.id = :id AND e.teacher.email = :email
             """)
     Optional<OMRFile> findByIdAndTeacherEmail(@Param("id") Long id, @Param("email") String email);
+
+    @Query("""
+            SELECT COUNT(f) FROM OMRFile f
+            WHERE f.exam.teacher.email = :email AND f.status = :status
+            """)
+    long countByTeacherEmailAndStatus(
+            @Param("email") String email,
+            @Param("status") OmrSheetStatus status);
+
+    @Query("""
+            SELECT f FROM OMRFile f
+            JOIN FETCH f.exam e
+            WHERE e.teacher.email = :email AND f.status = :status
+            ORDER BY f.uploadTime DESC
+            """)
+    List<OMRFile> findByTeacherEmailAndStatus(
+            @Param("email") String email,
+            @Param("status") OmrSheetStatus status);
 }

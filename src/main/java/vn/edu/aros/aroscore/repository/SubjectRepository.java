@@ -52,4 +52,10 @@ public interface SubjectRepository extends JpaRepository<Subject, Long> {
             @Param("subjectName") String subjectName,
             @Param("email") String email,
             @Param("excludeId") Long excludeId);
+
+    @Query("""
+            SELECT COUNT(s) FROM Subject s
+            WHERE s.lecturer.email = :email AND s.isActive = true
+            """)
+    long countActiveByLecturerEmail(@Param("email") String email);
 }

@@ -128,4 +128,28 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     List<Submission> findAllByStudentIdAndOptionalExamId(
             @Param("studentId") Long studentId,
             @Param("examId") Long examId);
+
+    @Query("""
+            SELECT s FROM Submission s
+            JOIN FETCH s.exam e
+            LEFT JOIN FETCH e.subject
+            LEFT JOIN FETCH s.classroom
+            WHERE s.student.id = :studentId
+              AND s.submitTime IS NOT NULL
+              AND s.submitTime >= :since
+            ORDER BY s.submitTime DESC
+            """)
+    List<Submission> findSubmittedByStudentSince(
+            @Param("studentId") Long studentId,
+            @Param("since") java.time.LocalDateTime since);
+
+    @Query("""
+            SELECT COUNT(s) FROM Submission s
+            WHERE s.student.id = :studentId
+              AND s.submitTime IS NOT NULL
+              AND s.submitTime >= :since
+            """)
+    long countSubmittedByStudentSince(
+            @Param("studentId") Long studentId,
+            @Param("since") java.time.LocalDateTime since);
 }

@@ -79,6 +79,63 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
             @Param("draft") ExamStatus draft,
             Pageable pageable);
 
+    /**
+     * Đề Online (kỳ thi + luyện tập) đã giao lớp SV, bỏ DRAFT — dùng dashboard SV (không OMR).
+     */
+    @Query("""
+            SELECT DISTINCT e FROM Exam e
+            JOIN e.classrooms c
+            JOIN c.students s
+            JOIN FETCH e.subject
+            JOIN FETCH e.onlineSettings os
+            WHERE s.id = :studentId
+              AND c.isActive = true
+              AND e.examMode = vn.edu.aros.aroscore.entity.enums.ExamMode.ONLINE
+              AND os.status <> :draft
+            """)
+    java.util.List<Exam> findOnlineAvailableForStudentDashboard(
+            @Param("studentId") Long studentId,
+            @Param("draft") ExamStatus draft);
+
     /** Lớp đã được giao ít nhất một đề OMR. */
     boolean existsByClassrooms_IdAndExamMode(Long classroomId, ExamMode examMode);
+
+    @Query("""
+            SELECT COUNT(e) FROM Exam e
+            WHERE e.teacher.email = :email AND e.examMode = :mode AND e.purpose = :purpose
+            """)
+    long countByTeacherEmailAndModeAndPurpose(
+            @Param("email") String email,
+            @Param("mode") ExamMode mode,
+            @Param("purpose") ExamPurpose purpose);
+
+    @Query("""
+            SELECT COUNT(e) FROM Exam e
+            JOIN e.onlineSettings os
+            WHERE e.teacher.email = :email
+              AND e.examMode = :mode
+              AND e.purpose = :purpose
+              AND os.status = :status
+            """)
+    long countByTeacherEmailAndModePurposeAndOnlineStatus(
+            @Param("email") String email,
+            @Param("mode") ExamMode mode,
+            @Param("purpose") ExamPurpose purpose,
+            @Param("status") ExamStatus status);
+
+    @Query("""
+            SELECT DISTINCT e FROM Exam e
+            LEFT JOIN FETCH e.subject
+            LEFT JOIN FETCH e.onlineSettings
+            LEFT JOIN FETCH e.paperSettings
+            WHERE e.teacher.email = :email
+            """)
+    java.util.List<Exam> findAllByTeacherEmailWithSettings(@Param("email") String email);
+
+    @Query("""
+            SELECT e FROM Exam e
+            WHERE e.teacher.email = :email
+              AND e.purpose = vn.edu.aros.aroscore.entity.enums.ExamPurpose.EXAM
+            """)
+    java.util.List<Exam> findExamPurposeByTeacherEmail(@Param("email") String email);
 }

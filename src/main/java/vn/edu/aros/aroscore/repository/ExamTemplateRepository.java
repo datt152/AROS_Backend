@@ -39,4 +39,10 @@ public interface ExamTemplateRepository extends JpaRepository<ExamTemplate, Long
             WHERE t.id = :id AND t.teacher.email = :email
             """)
     Optional<ExamTemplate> findByIdAndTeacherEmail(@Param("id") Long id, @Param("email") String email);
+
+    @Query("""
+            SELECT COUNT(t) FROM ExamTemplate t
+            WHERE t.teacher.email = :email AND t.isActive = true
+            """)
+    long countActiveByTeacherEmail(@Param("email") String email);
 }

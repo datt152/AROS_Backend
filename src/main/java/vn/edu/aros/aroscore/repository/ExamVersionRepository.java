@@ -17,4 +17,6 @@ public interface ExamVersionRepository extends JpaRepository<ExamVersion, Long> 
     boolean existsByExamIdAndVersionCode(Long examId, String versionCode);
 
     void deleteByExamIdAndVersionCodeIn(Long examId, List<String> versionCodes);
+
+    boolean existsByExamId(Long examId);
 }
