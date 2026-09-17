@@ -716,6 +716,16 @@ public class ExamServiceImpl implements ExamService {
         return LocalDateTime.now().isAfter(startTime.plusMinutes(durationMinutes));
     }
 
+    /** Đã nộp + draft hết giờ (chưa nộp) đều tính là đã dùng lượt. */
+    private long countAttemptsUsed(List<Submission> submissions, Exam exam, boolean timeLimited) {
+        return submissions.stream().filter(s -> {
+            if (s.getSubmitTime() != null) {
+                return true;
+            }
+            return timeLimited && isPastExamDuration(s.getStartTime(), exam.getDuration());
+        }).count();
+    }
+
     @Override
     @Transactional(readOnly = true)
     public ExamStatsResponse getExamStats(Long examId, Long classroomId) {
@@ -1070,6 +1080,20 @@ public class ExamServiceImpl implements ExamService {
         Submission draft = submissionRepository
                 .findByExamAndStudentAndClassroomAndSubmitTimeIsNull(exam, student, classroom)
                 .orElse(null);
+
+        // Draft hết giờ mà chưa nộp sẽ chặn lượt mới — đóng lại để PRACTICE còn lượt có thể làm tiếp.
+        if (draft != null
+                && ExamSettingsSupport.isTimeLimitEnabled(exam)
+                && isPastExamDuration(draft.getStartTime(), exam.getDuration())) {
+            LocalDateTime deadline = draft.getStartTime().plusMinutes(exam.getDuration());
+            draft.setSubmitTime(deadline);
+            if (draft.getScore() == null) {
+                draft.setScore(0.0);
+            }
+            submissionRepository.save(draft);
+            draft = null;
+        }
+
         ExamVersion assignedVersion;
 
         if (draft != null && draft.getVersionCode() != null) {
@@ -1210,7 +1234,7 @@ public class ExamServiceImpl implements ExamService {
             }
         }
 
-        long attemptsUsed = submissions.stream().filter(s -> s.getSubmitTime() != null).count();
+        long attemptsUsed = countAttemptsUsed(submissions, exam, timeLimited);
         Integer maxAttempts = ExamSettingsSupport.effectiveMaxAttempts(exam);
         boolean scoreVisible = ExamSettingsSupport.showScoreToStudent(exam);
 
@@ -1218,7 +1242,12 @@ public class ExamServiceImpl implements ExamService {
         boolean canTake = false;
         if (examOpen) {
             if (preferred != null && preferred.getSubmitTime() == null) {
-                canTake = myStatus == GradingStatus.IN_PROGRESS;
+                if (myStatus == GradingStatus.IN_PROGRESS) {
+                    canTake = true;
+                } else if (myStatus == GradingStatus.EXPIRED) {
+                    // Lượt hết giờ đã tính vào attemptsUsed → còn slot thì được làm mới
+                    canTake = maxAttempts == null || attemptsUsed < maxAttempts;
+                }
             } else {
                 canTake = maxAttempts == null || attemptsUsed < maxAttempts;
             }

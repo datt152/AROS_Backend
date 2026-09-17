@@ -87,7 +87,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         if (ExamSettingsSupport.isTimeLimitEnabled(exam) && submission.getStartTime() != null) {
             LocalDateTime deadline = submission.getStartTime().plusMinutes(exam.getDuration());
-            if (LocalDateTime.now().isAfter(deadline.plusMinutes(1))) {
+            if (LocalDateTime.now().isAfter(deadline.plusMinutes(3))) {
                 throw new RuntimeException("Đã hết thời gian làm bài, không thể nộp!");
             }
         }
