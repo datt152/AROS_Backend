@@ -57,7 +57,7 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
             @Param("purpose") ExamPurpose purpose,
             Pageable pageable);
 
-    /** Đề đã giao cho lớp mà student đang học; Online bỏ DRAFT; OMR luôn hiện nếu đã giao. */
+    /** Đề Online đã giao lớp SV; bỏ DRAFT. Không hiện đề OMR cho sinh viên. */
     @Query("""
             SELECT DISTINCT e FROM Exam e
             JOIN e.classrooms c
@@ -67,10 +67,9 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
               AND c.isActive = true
               AND (:purpose IS NULL OR e.purpose = :purpose)
               AND (:classroomId IS NULL OR c.id = :classroomId)
-              AND (
-                    e.examMode = vn.edu.aros.aroscore.entity.enums.ExamMode.OMR_PAPER
-                    OR (os IS NOT NULL AND os.status <> :draft)
-                  )
+              AND e.examMode = vn.edu.aros.aroscore.entity.enums.ExamMode.ONLINE
+              AND os IS NOT NULL
+              AND os.status <> :draft
             """)
     Page<Exam> findAvailableForStudent(
             @Param("studentId") Long studentId,

@@ -51,6 +51,7 @@ import java.util.stream.Collectors;
 public class ExamServiceImpl implements ExamService {
 
     private static final String[] LABELS = {"A", "B", "C", "D", "E", "F", "G", "H"};
+    private static final int SUBMIT_GRACE_MINUTES = 3;
 
     private final ExamRepository examRepository;
     private final SubjectRepository subjectRepository;
@@ -717,6 +718,64 @@ public class ExamServiceImpl implements ExamService {
         return LocalDateTime.now().isAfter(startTime.plusMinutes(durationMinutes));
     }
 
+    private boolean isPastSubmitGrace(LocalDateTime startTime, Integer durationMinutes) {
+        if (startTime == null || durationMinutes == null) {
+            return false;
+        }
+        return LocalDateTime.now().isAfter(
+                startTime.plusMinutes(durationMinutes).plusMinutes(SUBMIT_GRACE_MINUTES));
+    }
+
+    @SneakyThrows
+    private void closeExpiredDraft(Submission draft, Exam exam) {
+        if (draft.getSubmitTime() != null) {
+            return;
+        }
+        ExamVersion version = draft.getVersionCode() == null
+                ? null
+                : examVersionRepository.findByExamIdAndVersionCode(exam.getId(), draft.getVersionCode()).orElse(null);
+        if (version == null || version.getShuffleMatrix() == null) {
+            draft.setSubmitTime(draft.getStartTime() != null
+                    ? draft.getStartTime().plusMinutes(exam.getDuration() != null ? exam.getDuration() : 0)
+                    : LocalDateTime.now());
+            if (draft.getScore() == null) {
+                draft.setScore(0.0);
+            }
+            submissionRepository.save(draft);
+            return;
+        }
+
+        List<QuestionMatrix> matrixList = objectMapper.readValue(
+                version.getShuffleMatrix(),
+                new TypeReference<List<QuestionMatrix>>() {});
+        if (draft.getDetails() != null) {
+            draft.getDetails().clear();
+        }
+        for (QuestionMatrix qm : matrixList) {
+            Question question = exam.getExamQuestions() == null
+                    ? null
+                    : exam.getExamQuestions().stream()
+                    .filter(eq -> eq.getQuestion().getId().equals(qm.getOriginalQuestionId()))
+                    .findFirst()
+                    .map(ExamQuestion::getQuestion)
+                    .orElse(null);
+            if (question == null) {
+                continue;
+            }
+            draft.addDetail(SubmissionDetail.builder()
+                    .question(question)
+                    .selectedAnswer(null)
+                    .isCorrect(false)
+                    .build());
+        }
+        draft.setScore(0.0);
+        LocalDateTime deadline = draft.getStartTime() != null && exam.getDuration() != null
+                ? draft.getStartTime().plusMinutes(exam.getDuration())
+                : LocalDateTime.now();
+        draft.setSubmitTime(deadline);
+        submissionRepository.save(draft);
+    }
+
     /** Đã nộp + draft hết giờ (chưa nộp) đều tính là đã dùng lượt. */
     private long countAttemptsUsed(List<Submission> submissions, Exam exam, boolean timeLimited) {
         return submissions.stream().filter(s -> {
@@ -1107,17 +1166,12 @@ public class ExamServiceImpl implements ExamService {
                 .findByExamAndStudentAndClassroomAndSubmitTimeIsNull(exam, student, classroom)
                 .orElse(null);
 
-        // Draft hết giờ mà chưa nộp sẽ chặn lượt mới — đóng lại để PRACTICE còn lượt có thể làm tiếp.
+        // Trong cửa sổ 3 phút sau hết giờ: giữ draft để FE tự nộp. Hết grace thì chấm bài (không tạo lượt mới trong request này).
         if (draft != null
                 && ExamSettingsSupport.isTimeLimitEnabled(exam)
-                && isPastExamDuration(draft.getStartTime(), exam.getDuration())) {
-            LocalDateTime deadline = draft.getStartTime().plusMinutes(exam.getDuration());
-            draft.setSubmitTime(deadline);
-            if (draft.getScore() == null) {
-                draft.setScore(0.0);
-            }
-            submissionRepository.save(draft);
-            draft = null;
+                && isPastSubmitGrace(draft.getStartTime(), exam.getDuration())) {
+            closeExpiredDraft(draft, exam);
+            throw new RuntimeException("Đã hết thời gian làm bài!");
         }
 
         ExamVersion assignedVersion;
@@ -1149,11 +1203,8 @@ public class ExamServiceImpl implements ExamService {
             submissionRepository.save(draft);
         }
 
-        if (ExamSettingsSupport.isTimeLimitEnabled(exam) && draft.getStartTime() != null) {
-            LocalDateTime deadline = draft.getStartTime().plusMinutes(exam.getDuration());
-            if (LocalDateTime.now().isAfter(deadline)) {
-                throw new RuntimeException("Đã hết thời gian làm bài!");
-            }
+        if (ExamSettingsSupport.isTimeLimitEnabled(exam) && isPastSubmitGrace(draft.getStartTime(), exam.getDuration())) {
+            throw new RuntimeException("Đã hết thời gian làm bài!");
         }
 
         List<QuestionMatrix> matrixList = objectMapper.readValue(

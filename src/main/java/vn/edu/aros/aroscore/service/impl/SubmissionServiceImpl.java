@@ -12,10 +12,12 @@ import vn.edu.aros.aroscore.dto.matrix.QuestionMatrix;
 import vn.edu.aros.aroscore.dto.request.SubmissionRequest;
 import vn.edu.aros.aroscore.dto.response.StudentSubmissionItemResponse;
 import vn.edu.aros.aroscore.dto.response.SubmissionDetailItemResponse;
+import vn.edu.aros.aroscore.dto.response.SubmissionDetailOptionResponse;
 import vn.edu.aros.aroscore.dto.response.SubmissionDetailResponse;
 import vn.edu.aros.aroscore.dto.response.SubmissionResponse;
 import vn.edu.aros.aroscore.entity.*;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
+import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 import vn.edu.aros.aroscore.entity.enums.GradingStatus;
 import vn.edu.aros.aroscore.service.exam.ExamSettingsSupport;
@@ -26,11 +28,14 @@ import vn.edu.aros.aroscore.repository.UserRepository;
 import vn.edu.aros.aroscore.service.SubmissionService;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -183,6 +188,8 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .findAllByStudentIdAndOptionalExamId(student.getId(), examId);
 
         return submissions.stream()
+                .filter(s -> s.getExam() != null
+                        && s.getExam().getExamMode() == ExamMode.ONLINE)
                 .sorted(Comparator.comparing(Submission::getId).reversed())
                 .map(this::toStudentSubmissionItem)
                 .toList();
@@ -204,10 +211,15 @@ public class SubmissionServiceImpl implements SubmissionService {
             throw new RuntimeException("Bạn không có quyền xem bài nộp này!");
         }
 
-        boolean scoreVisible = isTeacher || ExamSettingsSupport.showScoreToStudent(exam);
+        boolean practice = exam.getPurpose() == ExamPurpose.PRACTICE;
+        if (isOwner && !isTeacher && !practice) {
+            throw new RuntimeException("Bài thi chính thức không xem lại chi tiết. Chỉ bài luyện tập được xem câu hỏi và đáp án.");
+        }
 
         User student = submission.getStudent();
         GradingStatus status = resolveGradingStatus(submission, exam);
+        boolean scoreVisible = isTeacher || practice || ExamSettingsSupport.showScoreToStudent(exam);
+        boolean revealAnswers = isTeacher || (practice && status != GradingStatus.IN_PROGRESS);
 
         Map<Long, Double> rawPointsByQuestionId = exam.getExamQuestions() == null
                 ? Collections.emptyMap()
@@ -217,51 +229,74 @@ public class SubmissionServiceImpl implements SubmissionService {
                         ExamQuestion::getRawPoint,
                         (a, b) -> a));
 
-        Map<Long, QuestionMatrix> matrixByQuestionId = Collections.emptyMap();
+        Map<Long, QuestionMatrix> parsedMatrixByQuestionId = Collections.emptyMap();
+        List<QuestionMatrix> parsedMatrixList = Collections.emptyList();
         if (submission.getVersionCode() != null) {
             ExamVersion version = examVersionRepository
                     .findByExamIdAndVersionCode(exam.getId(), submission.getVersionCode())
                     .orElse(null);
             if (version != null && version.getShuffleMatrix() != null) {
-                List<QuestionMatrix> matrixList = objectMapper.readValue(
+                parsedMatrixList = objectMapper.readValue(
                         version.getShuffleMatrix(),
                         new TypeReference<List<QuestionMatrix>>() {});
-                matrixByQuestionId = matrixList.stream()
+                parsedMatrixByQuestionId = parsedMatrixList.stream()
                         .collect(Collectors.toMap(QuestionMatrix::getOriginalQuestionId, m -> m, (a, b) -> a));
             }
         }
+        final Map<Long, QuestionMatrix> matrixByQuestionId = parsedMatrixByQuestionId;
+        final List<QuestionMatrix> matrixList = parsedMatrixList;
 
         List<SubmissionDetail> detailEntities = submission.getDetails() == null
                 ? Collections.emptyList()
                 : submission.getDetails();
+        Map<Long, String> selectedByQuestionId = detailEntities.stream()
+                .filter(d -> d.getQuestion() != null)
+                .collect(Collectors.toMap(
+                        d -> d.getQuestion().getId(),
+                        d -> d.getSelectedAnswer() == null ? "" : d.getSelectedAnswer(),
+                        (a, b) -> a));
+        Map<Long, Boolean> correctByQuestionId = detailEntities.stream()
+                .filter(d -> d.getQuestion() != null)
+                .collect(Collectors.toMap(
+                        d -> d.getQuestion().getId(),
+                        SubmissionDetail::getIsCorrect,
+                        (a, b) -> a));
 
-        Map<Long, QuestionMatrix> finalMatrixByQuestionId = matrixByQuestionId;
         List<SubmissionDetailItemResponse> details;
-        if (!scoreVisible && isOwner && !isTeacher) {
-            details = List.of();
-        } else {
+        if (!detailEntities.isEmpty()) {
             details = detailEntities.stream()
-                    .map(detail -> {
-                        Question question = detail.getQuestion();
-                        QuestionMatrix matrix = finalMatrixByQuestionId.get(question.getId());
-                        Integer order = matrix != null ? matrix.getNewOrder() : null;
-                        String correctAnswer = matrix == null ? null : matrix.getAnswerMappings().stream()
-                                .filter(am -> Boolean.TRUE.equals(am.getIsCorrect()))
-                                .map(AnswerMapping::getNewLabel)
-                                .sorted()
-                                .collect(Collectors.joining(","));
-
-                        return SubmissionDetailItemResponse.builder()
-                                .questionId(question.getId())
-                                .order(order)
-                                .content(question.getContent())
-                                .type(question.getType())
-                                .selectedAnswer(detail.getSelectedAnswer())
-                                .correctAnswer(scoreVisible ? correctAnswer : null)
-                                .isCorrect(scoreVisible ? detail.getIsCorrect() : null)
-                                .rawPoint(rawPointsByQuestionId.getOrDefault(question.getId(), 1.0))
-                                .build();
+                    .map(detail -> toDetailItem(
+                            detail.getQuestion(),
+                            matrixByQuestionId.get(detail.getQuestion().getId()),
+                            detail.getSelectedAnswer(),
+                            detail.getIsCorrect(),
+                            revealAnswers,
+                            rawPointsByQuestionId))
+                    .sorted(Comparator.comparing(
+                            SubmissionDetailItemResponse::getOrder,
+                            Comparator.nullsLast(Integer::compareTo)))
+                    .toList();
+        } else {
+            Map<Long, Question> questionsById = exam.getExamQuestions() == null
+                    ? Collections.emptyMap()
+                    : exam.getExamQuestions().stream()
+                    .collect(Collectors.toMap(eq -> eq.getQuestion().getId(), ExamQuestion::getQuestion, (a, b) -> a));
+            details = matrixList.stream()
+                    .map(matrix -> {
+                        Question question = questionsById.get(matrix.getOriginalQuestionId());
+                        if (question == null) {
+                            return null;
+                        }
+                        String selected = selectedByQuestionId.get(question.getId());
+                        return toDetailItem(
+                                question,
+                                matrix,
+                                selected == null || selected.isBlank() ? null : selected,
+                                correctByQuestionId.get(question.getId()),
+                                revealAnswers,
+                                rawPointsByQuestionId);
                     })
+                    .filter(item -> item != null)
                     .sorted(Comparator.comparing(
                             SubmissionDetailItemResponse::getOrder,
                             Comparator.nullsLast(Integer::compareTo)))
@@ -271,8 +306,8 @@ public class SubmissionServiceImpl implements SubmissionService {
         int correctCount = (int) detailEntities.stream()
                 .filter(d -> Boolean.TRUE.equals(d.getIsCorrect()))
                 .count();
-        int totalQuestions = !detailEntities.isEmpty()
-                ? detailEntities.size()
+        int totalQuestions = !details.isEmpty()
+                ? details.size()
                 : (exam.getExamQuestions() != null ? exam.getExamQuestions().size() : 0);
 
         return SubmissionDetailResponse.builder()
@@ -293,13 +328,80 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .totalQuestions(totalQuestions)
                 .startTime(submission.getStartTime())
                 .submitTime(submission.getSubmitTime())
+                .purpose(exam.getPurpose())
+                .scoreVisible(scoreVisible)
                 .details(details)
                 .build();
     }
 
+    private SubmissionDetailItemResponse toDetailItem(
+            Question question,
+            QuestionMatrix matrix,
+            String selectedAnswer,
+            Boolean isCorrect,
+            boolean revealAnswers,
+            Map<Long, Double> rawPointsByQuestionId) {
+        Integer order = matrix != null ? matrix.getNewOrder() : null;
+        String correctAnswer = matrix == null ? null : matrix.getAnswerMappings().stream()
+                .filter(am -> Boolean.TRUE.equals(am.getIsCorrect()))
+                .map(AnswerMapping::getNewLabel)
+                .sorted()
+                .collect(Collectors.joining(","));
+        return SubmissionDetailItemResponse.builder()
+                .questionId(question.getId())
+                .order(order)
+                .content(question.getContent())
+                .type(question.getType())
+                .selectedAnswer(selectedAnswer)
+                .correctAnswer(revealAnswers ? correctAnswer : null)
+                .isCorrect(revealAnswers ? isCorrect : null)
+                .rawPoint(rawPointsByQuestionId.getOrDefault(question.getId(), 1.0))
+                .options(buildDetailOptions(question, matrix, selectedAnswer, revealAnswers))
+                .build();
+    }
+
+    private List<SubmissionDetailOptionResponse> buildDetailOptions(
+            Question question,
+            QuestionMatrix matrix,
+            String selectedAnswer,
+            boolean revealAnswers) {
+        if (matrix == null || matrix.getAnswerMappings() == null) {
+            return List.of();
+        }
+        Set<String> selected = new HashSet<>();
+        if (selectedAnswer != null && !selectedAnswer.isBlank()) {
+            Arrays.stream(selectedAnswer.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .forEach(selected::add);
+        }
+        List<SubmissionDetailOptionResponse> options = new ArrayList<>();
+        for (AnswerMapping mapping : matrix.getAnswerMappings()) {
+            String content = question.getOptions() == null
+                    ? ""
+                    : question.getOptions().stream()
+                    .filter(option -> option.getId().equals(mapping.getOriginalOptionId()))
+                    .map(AnswerOption::getContent)
+                    .findFirst()
+                    .orElse("");
+            Boolean correct = Boolean.TRUE.equals(mapping.getIsCorrect());
+            options.add(SubmissionDetailOptionResponse.builder()
+                    .label(mapping.getNewLabel())
+                    .content(content)
+                    .selected(selected.contains(mapping.getNewLabel()))
+                    .correct(revealAnswers ? correct : null)
+                    .build());
+        }
+        options.sort(Comparator.comparing(
+                SubmissionDetailOptionResponse::getLabel,
+                Comparator.nullsLast(String::compareTo)));
+        return options;
+    }
+
     private StudentSubmissionItemResponse toStudentSubmissionItem(Submission submission) {
         Exam exam = submission.getExam();
-        boolean scoreVisible = ExamSettingsSupport.showScoreToStudent(exam);
+        boolean scoreVisible = exam.getPurpose() == ExamPurpose.PRACTICE
+                || ExamSettingsSupport.showScoreToStudent(exam);
         boolean submitted = submission.getSubmitTime() != null;
 
         return StudentSubmissionItemResponse.builder()

@@ -22,7 +22,7 @@ public class SubjectController {
     private SubjectService subjectService;
 
     @PostMapping
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<SubjectResponse> createSubject(@Valid @RequestBody SubjectRequest request) {
         return new ResponseEntity<>(subjectService.createSubject(request), HttpStatus.CREATED);
     }
@@ -41,7 +41,7 @@ public class SubjectController {
     }
 
     @PutMapping("/{id}")
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<SubjectResponse> updateSubject(
             @PathVariable Long id,
             @Valid @RequestBody SubjectRequest request) {
@@ -49,7 +49,7 @@ public class SubjectController {
     }
 
     @DeleteMapping("/{id}")
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Void> deleteSubject(@PathVariable Long id) {
         subjectService.deleteSubject(id);
         return ResponseEntity.noContent().build();

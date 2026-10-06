@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import vn.edu.aros.aroscore.entity.enums.QuestionType;
 
+import java.util.List;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -19,4 +21,5 @@ public class SubmissionDetailItemResponse {
     private String correctAnswer;
     private Boolean isCorrect;
     private Double rawPoint;
+    private List<SubmissionDetailOptionResponse> options;
 }

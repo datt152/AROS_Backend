@@ -19,13 +19,13 @@ public class QuestionController {
     private QuestionService questionService;
 
     @PostMapping
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<QuestionResponse> createQuestion(@Valid @RequestBody QuestionRequest request) {
         return new ResponseEntity<>(questionService.createQuestion(request), HttpStatus.CREATED);
     }
 
     @GetMapping
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Page<QuestionResponse>> getAllQuestions(
             @RequestParam(required = false) Long subjectId,
             @RequestParam(required = false) Long topicId,
@@ -34,7 +34,7 @@ public class QuestionController {
         return ResponseEntity.ok(questionService.getAllQuestions(subjectId, topicId, page, size));
     }
     @PutMapping("/{id}")
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<QuestionResponse> updateQuestion(
             @PathVariable Long id,
             @Valid @RequestBody QuestionRequest request) {
@@ -42,7 +42,7 @@ public class QuestionController {
     }
 
     @DeleteMapping("/{id}")
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<String> softDeleteQuestion(@PathVariable Long id) {
         questionService.softDeleteQuestion(id);
         return ResponseEntity.ok("Đã xóa câu hỏi khỏi ngân hàng!");

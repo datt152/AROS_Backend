@@ -3,6 +3,7 @@ package vn.edu.aros.aroscore.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,20 +27,20 @@ public class SubmissionController {
     private final SubmissionService submissionService;
 
     @PostMapping
-//    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<SubmissionResponse> submitExam(@Valid @RequestBody SubmissionRequest request) {
         return ResponseEntity.ok(submissionService.submitExam(request));
     }
 
     @GetMapping("/my")
-//    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<List<StudentSubmissionItemResponse>> getMySubmissions(
             @RequestParam(required = false) Long examId) {
         return ResponseEntity.ok(submissionService.getMySubmissions(examId));
     }
 
     @GetMapping("/{id}")
-//    @PreAuthorize("hasAnyRole('TEACHER','STUDENT')")
+    @PreAuthorize("hasAnyRole('TEACHER','STUDENT')")
     public ResponseEntity<SubmissionDetailResponse> getSubmissionDetail(@PathVariable Long id) {
         return ResponseEntity.ok(submissionService.getSubmissionDetail(id));
     }

@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import vn.edu.aros.aroscore.entity.enums.GradingStatus;
+import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,5 +32,7 @@ public class SubmissionDetailResponse {
     private Integer totalQuestions;
     private LocalDateTime startTime;
     private LocalDateTime submitTime;
+    private ExamPurpose purpose;
+    private Boolean scoreVisible;
     private List<SubmissionDetailItemResponse> details;
 }

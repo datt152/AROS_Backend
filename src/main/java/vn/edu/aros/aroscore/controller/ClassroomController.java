@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import vn.edu.aros.aroscore.dto.request.BulkCreateAccountsRequest;
@@ -37,13 +38,13 @@ public class ClassroomController {
     private BulkAccountService bulkAccountService;
 
     @PostMapping
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<ClassroomResponse> createClassroom(@Valid @RequestBody ClassroomRequest request) {
         return new ResponseEntity<>(classroomService.createClassroom(request), HttpStatus.CREATED);
     }
 
     @GetMapping("/my")
-//    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<Page<ClassroomResponse>> getMyClassrooms(
             @RequestParam(required = false) Long subjectId,
             @RequestParam(defaultValue = "0") int page,
@@ -52,7 +53,7 @@ public class ClassroomController {
     }
 
     @GetMapping
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Page<ClassroomResponse>> getAllClassrooms(
             @RequestParam(required = false) Long subjectId,
             @RequestParam(defaultValue = "0") int page,
@@ -63,19 +64,19 @@ public class ClassroomController {
     }
 
     @GetMapping("/{id}")
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<ClassroomResponse> getClassroomById(@PathVariable Long id) {
         return ResponseEntity.ok(classroomService.getClassroomById(id));
     }
 
     @GetMapping("/{id}/students")
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<List<StudentInfoResponse>> getClassroomStudents(@PathVariable Long id) {
         return ResponseEntity.ok(classroomService.getClassroomStudents(id));
     }
 
     @PutMapping("/{id}")
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<ClassroomResponse> updateClassroom(
             @PathVariable Long id,
             @Valid @RequestBody ClassroomUpdateRequest request) {
@@ -83,13 +84,13 @@ public class ClassroomController {
     }
 
     @DeleteMapping("/{id}")
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Void> deleteClassroom(@PathVariable Long id) {
         classroomService.deleteClassroom(id);
         return ResponseEntity.noContent().build();
     }
     @PostMapping("/{id}/students/enroll")
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<String> enrollStudents(
             @PathVariable Long id,
             @Valid @RequestBody EnrollStudentRequest request) {
@@ -104,7 +105,7 @@ public class ClassroomController {
      * Dòng 1 = tiêu đề. Tạo User nếu chưa có (chưa cần Account).
      */
     @PostMapping(value = "/{id}/students/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<StudentImportResultResponse> importStudents(
             @PathVariable Long id,
             @RequestPart("file") MultipartFile file) {
@@ -116,7 +117,7 @@ public class ClassroomController {
      * Mật khẩu tạm random (UUID) → gửi email async.
      */
     @PostMapping("/{id}/students/create-accounts")
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<BulkCreateAccountsResultResponse> createAccounts(
             @PathVariable Long id,
             @RequestBody(required = false) BulkCreateAccountsRequest request) {
@@ -125,7 +126,7 @@ public class ClassroomController {
     }
 
     @DeleteMapping("/{id}/students/{studentId}")
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<String> removeStudent(
             @PathVariable Long id,
             @PathVariable Long studentId) {
@@ -138,7 +139,7 @@ public class ClassroomController {
      * Giáo viên gán/sửa mã sinh viên cho SV trong lớp.
      */
     @PatchMapping("/{id}/students/{studentId}/student-code")
-//    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<StudentInfoResponse> updateStudentCode(
             @PathVariable Long id,
             @PathVariable Long studentId,
