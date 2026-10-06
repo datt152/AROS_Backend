@@ -17,15 +17,20 @@ import java.util.Locale;
 
 /**
  * Đọc .xlsx theo template FE cố định (bỏ qua dòng 1 = tiêu đề):
- * Cột A = email | Cột B = fullName | Cột C = studentCode (tuỳ chọn)
+ * A=STT (bỏ qua, không lưu DB) | B=Họ đệm | C=Tên | D=MSSV | E=Email
+ * fullName lưu DB = "Họ đệm" + " " + "Tên".
  */
 @Component
 public class StudentExcelParser {
 
     public static final int MAX_ROWS = 500;
-    private static final int COL_EMAIL = 0;
-    private static final int COL_FULL_NAME = 1;
-    private static final int COL_STUDENT_CODE = 2;
+    /** Cột A — chỉ có trên file, không map vào entity. */
+    @SuppressWarnings("unused")
+    private static final int COL_STT = 0;
+    private static final int COL_LAST_MIDDLE = 1;
+    private static final int COL_FIRST_NAME = 2;
+    private static final int COL_STUDENT_CODE = 3;
+    private static final int COL_EMAIL = 4;
 
     private final DataFormatter formatter = new DataFormatter();
 
@@ -52,16 +57,21 @@ public class StudentExcelParser {
                 if (row == null) {
                     continue;
                 }
-                String email = cellString(row, COL_EMAIL);
-                String fullName = cellString(row, COL_FULL_NAME);
+                // Cột A (STT) giữ trên file cho người dùng — không đọc vào DB
+                String lastMiddle = cellString(row, COL_LAST_MIDDLE);
+                String firstName = cellString(row, COL_FIRST_NAME);
                 String studentCode = cellString(row, COL_STUDENT_CODE);
-                if ((email == null || email.isBlank()) && (fullName == null || fullName.isBlank())) {
+                String email = cellString(row, COL_EMAIL);
+
+                if (isBlank(email) && isBlank(lastMiddle) && isBlank(firstName) && isBlank(studentCode)) {
                     continue;
                 }
                 if (rows.size() >= MAX_ROWS) {
                     throw new IllegalArgumentException("File vượt quá " + MAX_ROWS + " dòng dữ liệu!");
                 }
-                rows.add(new ParsedRow(i + 1, email, fullName, studentCode));
+
+                String fullName = joinFullName(lastMiddle, firstName);
+                rows.add(new ParsedRow(i + 1, email, fullName, studentCode, lastMiddle, firstName));
             }
 
             if (rows.isEmpty()) {
@@ -73,6 +83,22 @@ public class StudentExcelParser {
         } catch (Exception e) {
             throw new IllegalArgumentException("Không đọc được file Excel: " + e.getMessage());
         }
+    }
+
+    private static String joinFullName(String lastMiddle, String firstName) {
+        String left = lastMiddle != null ? lastMiddle.trim() : "";
+        String right = firstName != null ? firstName.trim() : "";
+        if (left.isEmpty()) {
+            return right;
+        }
+        if (right.isEmpty()) {
+            return left;
+        }
+        return left + " " + right;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private String cellString(Row row, int colIdx) {
@@ -90,6 +116,12 @@ public class StudentExcelParser {
         return value.isEmpty() ? null : value;
     }
 
-    public record ParsedRow(int rowNumber, String email, String fullName, String studentCode) {
+    public record ParsedRow(
+            int rowNumber,
+            String email,
+            String fullName,
+            String studentCode,
+            String lastMiddle,
+            String firstName) {
     }
 }

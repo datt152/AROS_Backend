@@ -99,8 +99,9 @@ public class ClassroomController {
     }
 
     /**
-     * Import SV từ Excel (.xlsx) — template FE: A=email, B=fullName, C=studentCode.
-     * Dòng 1 = tiêu đề (bỏ qua). Tạo User nếu chưa có (chưa cần Account).
+     * Import SV từ Excel (.xlsx) — template:
+     * A=STT (bỏ qua) | B=Họ đệm | C=Tên | D=MSSV | E=Email.
+     * Dòng 1 = tiêu đề. Tạo User nếu chưa có (chưa cần Account).
      */
     @PostMapping(value = "/{id}/students/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 //    @PreAuthorize("hasRole('TEACHER')")

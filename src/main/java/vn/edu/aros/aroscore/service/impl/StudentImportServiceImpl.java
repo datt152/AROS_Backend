@@ -62,7 +62,13 @@ public class StudentImportServiceImpl implements StudentImportService {
 
                 String fullName = row.fullName() != null ? row.fullName().trim() : "";
                 if (fullName.isBlank()) {
-                    throw new IllegalArgumentException("Họ tên không được để trống");
+                    throw new IllegalArgumentException("Họ đệm và Tên không được để trống");
+                }
+                if (row.lastMiddle() == null || row.lastMiddle().isBlank()) {
+                    throw new IllegalArgumentException("Họ đệm không được để trống");
+                }
+                if (row.firstName() == null || row.firstName().isBlank()) {
+                    throw new IllegalArgumentException("Tên không được để trống");
                 }
 
                 String codeFromFile = null;
