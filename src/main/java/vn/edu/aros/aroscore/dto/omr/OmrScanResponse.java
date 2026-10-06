@@ -60,6 +60,12 @@ public class OmrScanResponse {
         private Map<String, OmrAnswerItem> items;
         @JsonProperty("need_review")
         private List<Integer> needReview;
+        @JsonProperty("multi_mark_questions")
+        private List<Integer> multiMarkQuestions;
+        @JsonProperty("warning_questions")
+        private List<Integer> warningQuestions;
+        private Map<String, Integer> counts;
+        private Map<String, Object> calibration;
         @JsonProperty("column_warnings")
         private List<String> columnWarnings;
         @JsonProperty("total_questions")
@@ -72,10 +78,15 @@ public class OmrScanResponse {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class OmrAnswerItem {
         private String chosen;
+        /** Engine mới: ok | warning | error | empty */
+        private String level;
+        private String color;
         private String status;
         private Integer column;
         private OmrBubble bubble;
         private List<OmrBubble> bubbles;
+        @JsonProperty("marked_bubbles")
+        private List<OmrBubble> markedBubbles;
     }
 
     @Data

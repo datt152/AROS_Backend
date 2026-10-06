@@ -213,6 +213,7 @@ public class OmrSheetServiceImpl implements OmrSheetService {
         // Giữ bubble overlay + đáp án cũ; chỉ ghi đè câu GV sửa
         Map<Integer, String> mergedAnswers = new LinkedHashMap<>();
         Map<Integer, String> preservedBubbles = new HashMap<>();
+        Map<Integer, String> preservedOverlays = new HashMap<>();
         if (sheet.getAnswerDetails() != null) {
             for (OmrAnswerDetail detail : sheet.getAnswerDetails()) {
                 if (detail.getChosen() != null) {
@@ -221,6 +222,9 @@ public class OmrSheetServiceImpl implements OmrSheetService {
                 if (detail.getBubbleJson() != null && !detail.getBubbleJson().isBlank()) {
                     preservedBubbles.put(detail.getQuestionNumber(), detail.getBubbleJson());
                 }
+                if (detail.getMarkedBubblesJson() != null && !detail.getMarkedBubblesJson().isBlank()) {
+                    preservedOverlays.put(detail.getQuestionNumber(), detail.getMarkedBubblesJson());
+                }
             }
         }
         if (request.getAnswers() != null) {
@@ -228,7 +232,7 @@ public class OmrSheetServiceImpl implements OmrSheetService {
         }
 
         OmrGradingService.GradingOutcome outcome = omrGradingService.regradeManual(
-                exam, sheet.getDetectedExamCode(), mergedAnswers, preservedBubbles);
+                exam, sheet.getDetectedExamCode(), mergedAnswers, preservedBubbles, preservedOverlays);
 
         applyGradingOutcome(sheet, outcome, false);
         syncSubmission(sheet, outcome);
@@ -263,7 +267,6 @@ public class OmrSheetServiceImpl implements OmrSheetService {
         sheet.setDetectedStudentId(detectedStudentId);
         sheet.setDetectedExamCode(detectedExamCode);
 
-        // Fail-fast: MSSV
         if (detectedStudentId == null || detectedStudentId.isBlank()) {
             failSheet(sheet, "Không đọc được mã sinh viên trên phiếu!");
         }
@@ -282,7 +285,18 @@ public class OmrSheetServiceImpl implements OmrSheetService {
         }
         sheet.setStudent(student);
 
-        // Fail-fast: mã đề
+        // Mỗi SV chỉ quét 1 lần / phiên (FAILED / RETAKE_REQUIRED được thử lại)
+        if (sheet.getExamSession() != null
+                && omrFileRepository.existsStudentSheetInSession(
+                sheet.getExamSession().getId(),
+                student.getId(),
+                sheet.getId(),
+                List.of(OmrSheetStatus.GRADED, OmrSheetStatus.NEEDS_REVIEW, OmrSheetStatus.PROCESSING))) {
+            failSheet(sheet,
+                    "Sinh viên \"" + detectedStudentId
+                            + "\" đã có phiếu trong phiên chấm này. Không quét lại.");
+        }
+
         if (detectedExamCode == null || detectedExamCode.isBlank()) {
             failSheet(sheet, "Không đọc được mã đề trên phiếu!");
         }
@@ -301,11 +315,8 @@ public class OmrSheetServiceImpl implements OmrSheetService {
         OmrGradingService.GradingOutcome outcome = omrGradingService.grade(
                 sheet.getExam(), detectedExamCode, scan, engineNeedReview);
 
-        boolean needsReview = !outcome.needReview().isEmpty()
-                || outcome.answers().stream().anyMatch(OmrGradingService.GradedAnswer::needsReview);
-
-        applyGradingOutcome(sheet, outcome, needsReview);
-        syncSubmission(sheet, outcome);
+        // Quét xong luôn cần GV xem lại; điểm chính thức ghi khi bấm Lưu kết quả
+        applyGradingOutcome(sheet, outcome, true);
         return toResponse(sheet);
     }
 
@@ -338,7 +349,10 @@ public class OmrSheetServiceImpl implements OmrSheetService {
                     .correctAnswer(ga.correctAnswer())
                     .isCorrect(ga.isCorrect())
                     .omrStatus(ga.omrStatus())
+                    .omrLevel(ga.level())
+                    .omrColor(ga.color())
                     .bubbleJson(ga.bubbleJson())
+                    .markedBubblesJson(ga.markedBubblesJson())
                     .build());
         }
 
@@ -487,27 +501,18 @@ public class OmrSheetServiceImpl implements OmrSheetService {
                 : sheet.getAnswerDetails().stream()
                 .sorted(Comparator.comparing(OmrAnswerDetail::getQuestionNumber))
                 .map(d -> {
-                    OmrBubbleResponse bubble = null;
-                    if (d.getBubbleJson() != null) {
-                        try {
-                            var b = objectMapper.readValue(d.getBubbleJson(), OmrScanResponse.OmrBubble.class);
-                            bubble = OmrBubbleResponse.builder()
-                                    .choice(b.getChoice())
-                                    .x(b.getX())
-                                    .y(b.getY())
-                                    .w(b.getW())
-                                    .h(b.getH())
-                                    .build();
-                        } catch (JsonProcessingException ignored) {
-                        }
-                    }
+                    OmrBubbleResponse bubble = parseBubble(d.getBubbleJson());
+                    List<OmrBubbleResponse> overlayBubbles = parseOverlayList(d.getMarkedBubblesJson());
                     return OmrAnswerItemResponse.builder()
                             .question(d.getQuestionNumber())
                             .chosen(d.getChosen())
                             .correctAnswer(d.getCorrectAnswer())
                             .isCorrect(d.getIsCorrect())
                             .status(d.getOmrStatus())
+                            .level(d.getOmrLevel())
+                            .color(d.getOmrColor())
                             .bubble(bubble)
+                            .overlayBubbles(overlayBubbles)
                             .build();
                 })
                 .toList();
@@ -529,6 +534,45 @@ public class OmrSheetServiceImpl implements OmrSheetService {
                 .needReview(needReview)
                 .answers(answers)
                 .gradedAt(sheet.getGradedAt())
+                .build();
+    }
+
+    private OmrBubbleResponse parseBubble(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            var b = objectMapper.readValue(json, OmrScanResponse.OmrBubble.class);
+            return toBubbleResponse(b);
+        } catch (JsonProcessingException ignored) {
+            return null;
+        }
+    }
+
+    private List<OmrBubbleResponse> parseOverlayList(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            List<OmrBubbleResponse> list = objectMapper.readValue(json,
+                    objectMapper.getTypeFactory()
+                            .constructCollectionType(List.class, OmrBubbleResponse.class));
+            return list != null ? list : List.of();
+        } catch (JsonProcessingException ignored) {
+            return List.of();
+        }
+    }
+
+    private OmrBubbleResponse toBubbleResponse(OmrScanResponse.OmrBubble b) {
+        if (b == null) {
+            return null;
+        }
+        return OmrBubbleResponse.builder()
+                .choice(b.getChoice())
+                .x(b.getX())
+                .y(b.getY())
+                .w(b.getW())
+                .h(b.getH())
                 .build();
     }
 

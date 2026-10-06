@@ -35,6 +35,17 @@ public class OmrAnswerDetail {
     @Column(name = "omr_status", length = 30)
     private String omrStatus;
 
+    /** ok | warning | error | empty — từ OMR Engine. */
+    @Column(name = "omr_level", length = 20)
+    private String omrLevel;
+
+    @Column(name = "omr_color", length = 20)
+    private String omrColor;
+
     @Column(name = "bubble_json", columnDefinition = "TEXT")
     private String bubbleJson;
+
+    /** JSON các ô tô trùng (level=error) để FE overlay. */
+    @Column(name = "marked_bubbles_json", columnDefinition = "TEXT")
+    private String markedBubblesJson;
 }

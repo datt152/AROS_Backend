@@ -15,4 +15,6 @@ public class OmrBubbleResponse {
     private Integer y;
     private Integer w;
     private Integer h;
+    /** green = ô tô đúng, red = ô tô sai / tô trùng */
+    private String tone;
 }

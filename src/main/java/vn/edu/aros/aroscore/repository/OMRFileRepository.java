@@ -30,6 +30,21 @@ public interface OMRFileRepository extends JpaRepository<OMRFile, Long> {
             @Param("contentHash") String contentHash,
             @Param("statuses") Collection<OmrSheetStatus> statuses);
 
+    /** Đã có phiếu hợp lệ của cùng SV trong phiên (trừ chính sheet đang xử lý). */
+    @Query("""
+            SELECT CASE WHEN COUNT(f) > 0 THEN TRUE ELSE FALSE END
+            FROM OMRFile f
+            WHERE f.examSession.id = :sessionId
+              AND f.student.id = :studentId
+              AND f.id <> :excludeSheetId
+              AND f.status IN :statuses
+            """)
+    boolean existsStudentSheetInSession(
+            @Param("sessionId") Long sessionId,
+            @Param("studentId") Long studentId,
+            @Param("excludeSheetId") Long excludeSheetId,
+            @Param("statuses") Collection<OmrSheetStatus> statuses);
+
     @Query("""
             SELECT f FROM OMRFile f
             LEFT JOIN FETCH f.answerDetails
