@@ -21,6 +21,7 @@ import vn.edu.aros.aroscore.dto.request.OnlineExamSettingsRequest;
 import vn.edu.aros.aroscore.dto.request.PaperExamSettingsRequest;
 import vn.edu.aros.aroscore.dto.response.*;
 import vn.edu.aros.aroscore.entity.*;
+import vn.edu.aros.aroscore.entity.enums.Difficulty;
 import vn.edu.aros.aroscore.entity.enums.ExamMode;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
@@ -731,6 +732,9 @@ public class ExamServiceImpl implements ExamService {
     public ExamStatsResponse getExamStats(Long examId, Long classroomId) {
         String email = getCurrentUserEmail();
         Exam exam = getOwnedExam(examId);
+        if (exam.getExamMode() != ExamMode.ONLINE) {
+            throw new RuntimeException("Thống kê bài thi chỉ áp dụng cho đề thi trực tuyến!");
+        }
 
         Long responseClassroomId = null;
         String responseClassroomName = null;
@@ -910,6 +914,12 @@ public class ExamServiceImpl implements ExamService {
             }
         }
 
+        List<Long> questionIds = examQuestions.stream()
+                .map(eq -> eq.getQuestion().getId())
+                .toList();
+        Map<Long, Question> questionsById = questionRepository.findAllById(questionIds).stream()
+                .collect(Collectors.toMap(Question::getId, q -> q, (a, b) -> a));
+
         List<QuestionStatsResponse> result = new ArrayList<>();
         for (ExamQuestion eq : examQuestions) {
             Long questionId = eq.getQuestion().getId();
@@ -917,11 +927,14 @@ public class ExamServiceImpl implements ExamService {
             int answered = counter[0];
             int correct = counter[1];
             Double rate = answered == 0 ? null : round2((double) correct / answered);
+            Question question = questionsById.getOrDefault(questionId, eq.getQuestion());
+            Difficulty difficulty = question != null ? question.getDifficulty() : null;
 
             result.add(QuestionStatsResponse.builder()
                     .questionId(questionId)
                     .order(eq.getQuestionOrder())
                     .content(eq.getQuestion().getContent())
+                    .difficulty(difficulty != null ? difficulty.name() : null)
                     .rawPoint(eq.getRawPoint())
                     .answeredCount(answered)
                     .correctCount(correct)
@@ -943,8 +956,21 @@ public class ExamServiceImpl implements ExamService {
         String email = getCurrentUserEmail();
         Exam exam = getOwnedExam(id);
 
-        if (!ExamSettingsSupport.allowEdit(exam)
-                && submissionRepository.existsByExamAndSubmitTimeIsNotNull(exam)) {
+        boolean lockedBySubmissions = !ExamSettingsSupport.allowEdit(exam)
+                && submissionRepository.existsByExamAndSubmitTimeIsNotNull(exam);
+
+        if (lockedBySubmissions) {
+            // Vẫn cho đóng / kết thúc đề; chỉ chặn sửa nội dung & cấu hình khác
+            ExamStatus requestedStatus = request.getOnlineSettings() != null
+                    ? request.getOnlineSettings().getStatus()
+                    : null;
+            if (exam.getExamMode() == ExamMode.ONLINE
+                    && exam.getOnlineSettings() != null
+                    && (requestedStatus == ExamStatus.CLOSED || requestedStatus == ExamStatus.COMPLETED)) {
+                assertCanPublish(exam, requestedStatus);
+                exam.getOnlineSettings().setStatus(requestedStatus);
+                return toFullResponse(examRepository.save(exam));
+            }
             throw new RuntimeException("Đề thi không cho phép chỉnh sửa sau khi đã có bài nộp!");
         }
 
