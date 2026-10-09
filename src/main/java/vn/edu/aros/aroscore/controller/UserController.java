@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import vn.edu.aros.aroscore.dto.request.ChangePasswordRequest;
 import vn.edu.aros.aroscore.dto.request.UpdateProfileRequest;
 import vn.edu.aros.aroscore.dto.request.UpdateStudentCodeRequest;
 import vn.edu.aros.aroscore.dto.response.UserResponse;
@@ -41,5 +42,15 @@ public class UserController {
     public ResponseEntity<UserResponse> updateMyStudentCode(
             @Valid @RequestBody UpdateStudentCodeRequest request) {
         return ResponseEntity.ok(userService.updateMyStudentCode(request));
+    }
+
+    /**
+     * Đổi mật khẩu khi đã đăng nhập (xác minh bằng mật khẩu hiện tại).
+     */
+    @PutMapping("/me/password")
+    public ResponseEntity<String> changeMyPassword(
+            @Valid @RequestBody ChangePasswordRequest request) {
+        userService.changeMyPassword(request);
+        return ResponseEntity.ok("Đổi mật khẩu thành công!");
     }
 }

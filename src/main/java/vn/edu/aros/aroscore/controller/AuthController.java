@@ -13,8 +13,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import vn.edu.aros.aroscore.dto.request.ForgotPasswordRequest;
 import vn.edu.aros.aroscore.dto.request.LoginRequest;
 import vn.edu.aros.aroscore.dto.request.RegisterRequest;
+import vn.edu.aros.aroscore.dto.request.ResetPasswordRequest;
 import vn.edu.aros.aroscore.dto.response.AuthSession;
 import vn.edu.aros.aroscore.dto.response.LoginResponse;
 import vn.edu.aros.aroscore.service.AuthService;
@@ -71,6 +73,24 @@ public class AuthController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, expiredCookie.toString())
                 .body("Đăng xuất thành công!");
+    }
+
+    /**
+     * Bước 1 quên mật khẩu: gửi link đặt lại qua email. Luôn trả cùng một message dù email có tồn tại hay không.
+     */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<String> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.requestPasswordReset(request);
+        return ResponseEntity.ok("Yêu cầu đặt lại mật khẩu đã được gửi qua email của bạn.");
+    }
+
+    /**
+     * Bước 2 quên mật khẩu: đặt mật khẩu mới bằng token trong email.
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<String> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok("Đặt lại mật khẩu thành công!");
     }
 
     private ResponseCookie buildRefreshCookie(String refreshToken, long maxAgeSeconds) {

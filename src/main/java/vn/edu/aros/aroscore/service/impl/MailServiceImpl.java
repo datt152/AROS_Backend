@@ -53,4 +53,37 @@ public class MailServiceImpl implements MailService {
             log.error("Gửi mail tới {} thất bại: {}", toEmail, e.getMessage());
         }
     }
+
+    @Override
+    @Async
+    public void sendPasswordReset(String toEmail, String fullName, String resetUrl, long expirationMinutes) {
+        if (toEmail == null || toEmail.isBlank()) {
+            log.warn("Bỏ qua gửi mail đặt lại mật khẩu: email trống");
+            return;
+        }
+        try {
+            Context context = new Context();
+            context.setVariable("fullName", fullName != null ? fullName : toEmail);
+            context.setVariable("email", toEmail);
+            context.setVariable("resetUrl", resetUrl);
+            context.setVariable("expirationMinutes", expirationMinutes);
+            context.setVariable("appName", mailProperties.getFromName());
+
+            String html = templateEngine.process("mail/password-reset", context);
+
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setTo(toEmail);
+            helper.setSubject("[" + mailProperties.getFromName() + "] Đặt lại mật khẩu");
+            if (mailProperties.getFrom() != null && !mailProperties.getFrom().isBlank()) {
+                helper.setFrom(mailProperties.getFrom(), mailProperties.getFromName());
+            }
+            helper.setText(html, true);
+
+            mailSender.send(message);
+            log.info("Đã gửi mail đặt lại mật khẩu tới {}", toEmail);
+        } catch (Exception e) {
+            log.error("Gửi mail đặt lại mật khẩu tới {} thất bại: {}", toEmail, e.getMessage());
+        }
+    }
 }

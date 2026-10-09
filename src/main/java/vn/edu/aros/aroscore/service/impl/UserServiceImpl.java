@@ -2,8 +2,10 @@ package vn.edu.aros.aroscore.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.edu.aros.aroscore.dto.request.ChangePasswordRequest;
 import vn.edu.aros.aroscore.dto.request.UpdateProfileRequest;
 import vn.edu.aros.aroscore.dto.request.UpdateStudentCodeRequest;
 import vn.edu.aros.aroscore.dto.response.UserResponse;
@@ -22,6 +24,7 @@ public class UserServiceImpl implements UserService {
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
     private final StudentCodeService studentCodeService;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     @Transactional(readOnly = true)
@@ -66,6 +69,24 @@ public class UserServiceImpl implements UserService {
         userRepository.save(user);
 
         return toResponse(account);
+    }
+
+    @Override
+    @Transactional
+    public void changeMyPassword(ChangePasswordRequest request) {
+        Account account = loadCurrentAccount();
+        if (!passwordEncoder.matches(request.getCurrentPassword(), account.getPassword())) {
+            throw new IllegalArgumentException("Mật khẩu hiện tại không chính xác!");
+        }
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new IllegalArgumentException("Mật khẩu xác nhận không khớp!");
+        }
+        if (passwordEncoder.matches(request.getNewPassword(), account.getPassword())) {
+            throw new IllegalArgumentException("Mật khẩu mới phải khác mật khẩu hiện tại!");
+        }
+
+        account.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        accountRepository.save(account);
     }
 
     private Account loadCurrentAccount() {
