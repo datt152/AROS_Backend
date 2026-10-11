@@ -19,6 +19,7 @@ public class CustomUserDetails implements UserDetails {
     private final String username;
     private final String password;
     private final Collection<? extends GrantedAuthority> authorities;
+    private final boolean enabled;
 
     // Build từ Account Entity
     public static CustomUserDetails build(Account account) {
@@ -28,7 +29,8 @@ public class CustomUserDetails implements UserDetails {
                 account.getId(),
                 account.getEmail(),
                 account.getPassword(),
-                Collections.singletonList(authority)
+                Collections.singletonList(authority),
+                account.getUser() == null || account.getUser().isActive()
         );
     }
 
@@ -64,6 +66,6 @@ public class CustomUserDetails implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true;
+        return enabled;
     }
 }

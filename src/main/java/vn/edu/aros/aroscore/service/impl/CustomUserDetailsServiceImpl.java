@@ -5,6 +5,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import vn.edu.aros.aroscore.entity.Account;
 import vn.edu.aros.aroscore.repository.AccountRepository;
 import vn.edu.aros.aroscore.dto.CustomUserDetails;
@@ -16,7 +17,9 @@ public class CustomUserDetailsServiceImpl implements CustomUserDetailsService {
     @Autowired
     private AccountRepository accountRepository;
 
+    /** Cần transaction vì CustomUserDetails.build đọc account.user (LAZY) để kiểm tra isActive. */
     @Override
+    @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         // Tìm tài khoản trong Database
         Account account = accountRepository.findByEmail(email)

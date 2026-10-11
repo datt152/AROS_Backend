@@ -19,6 +19,8 @@ import vn.edu.aros.aroscore.dto.response.LoginResponse;
 import vn.edu.aros.aroscore.entity.Account;
 import vn.edu.aros.aroscore.entity.PasswordResetToken;
 import vn.edu.aros.aroscore.entity.User;
+import vn.edu.aros.aroscore.entity.enums.AuthClientType;
+import vn.edu.aros.aroscore.entity.enums.TokenRevokeReason;
 import vn.edu.aros.aroscore.entity.enums.UserRole;
 import vn.edu.aros.aroscore.exception.UnauthorizedException;
 import vn.edu.aros.aroscore.repository.AccountRepository;
@@ -26,16 +28,12 @@ import vn.edu.aros.aroscore.repository.PasswordResetTokenRepository;
 import vn.edu.aros.aroscore.service.AuthService;
 import vn.edu.aros.aroscore.service.CustomUserDetailsService;
 import vn.edu.aros.aroscore.service.MailService;
+import vn.edu.aros.aroscore.service.RefreshTokenService;
 import vn.edu.aros.aroscore.service.TurnstileService;
 import vn.edu.aros.aroscore.utils.JwtUtils;
+import vn.edu.aros.aroscore.utils.SecureTokenUtils;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
 import java.time.LocalDateTime;
-import java.util.Base64;
-import java.util.HexFormat;
 import java.util.Optional;
 
 @Service
@@ -44,7 +42,6 @@ public class AuthServiceImpl implements AuthService {
     private static final String ROLE_PREFIX = "ROLE_";
     private static final String INVALID_RESET_TOKEN_MESSAGE =
             "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn!";
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     @Autowired private AccountRepository accountRepository;
     @Autowired private PasswordEncoder passwordEncoder;
@@ -55,6 +52,7 @@ public class AuthServiceImpl implements AuthService {
     @Autowired private PasswordResetTokenRepository passwordResetTokenRepository;
     @Autowired private MailService mailService;
     @Autowired private AppMailProperties mailProperties;
+    @Autowired private RefreshTokenService refreshTokenService;
 
     @Value("${app.password-reset.expiration-minutes:15}")
     private long resetExpirationMinutes;
@@ -96,28 +94,44 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public AuthSession authenticateUser(LoginRequest request) {
+    @Transactional
+    public AuthSession authenticateUser(LoginRequest request, AuthClientType clientType) {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
 
         CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
         String email = userDetails.getUsername();
+        Account account = accountRepository.findById(userDetails.getAccountId())
+                .orElseThrow(() -> new UnauthorizedException("Không tìm thấy tài khoản hợp lệ!"));
 
         return AuthSession.builder()
                 .loginResponse(buildLoginResponse(userDetails, jwtUtils.generateAccessToken(email)))
-                .refreshToken(jwtUtils.generateRefreshToken(email))
+                .refreshToken(refreshTokenService.issue(account, clientType))
                 .build();
     }
 
     @Override
-    public LoginResponse refreshAccessToken(String refreshToken) {
-        if (refreshToken == null || refreshToken.isBlank() || !jwtUtils.validateRefreshToken(refreshToken)) {
-            throw new UnauthorizedException("Refresh token không hợp lệ hoặc đã hết hạn");
+    @Transactional(noRollbackFor = UnauthorizedException.class)
+    public AuthSession refreshSession(String refreshToken) {
+        RefreshTokenService.RotatedRefreshToken rotated = refreshTokenService.rotate(refreshToken);
+        Account account = rotated.account();
+
+        CustomUserDetails userDetails =
+                (CustomUserDetails) customUserDetailsService.loadUserByUsername(account.getEmail());
+        if (!userDetails.isEnabled()) {
+            refreshTokenService.revokeAll(account.getId(), TokenRevokeReason.ACCOUNT_DISABLED);
+            throw new UnauthorizedException("Tài khoản đã bị vô hiệu hóa");
         }
 
-        String email = jwtUtils.getEmailFromToken(refreshToken);
-        CustomUserDetails userDetails = (CustomUserDetails) customUserDetailsService.loadUserByUsername(email);
-        return buildLoginResponse(userDetails, jwtUtils.generateAccessToken(email));
+        return AuthSession.builder()
+                .loginResponse(buildLoginResponse(userDetails, jwtUtils.generateAccessToken(account.getEmail())))
+                .refreshToken(rotated.rawToken())
+                .build();
+    }
+
+    @Override
+    public void logout(String refreshToken) {
+        refreshTokenService.revoke(refreshToken);
     }
 
     /** Luôn trả thành công cho caller, kể cả khi email không tồn tại, để không lộ tài khoản nào có trong hệ thống. */
@@ -142,10 +156,10 @@ public class AuthServiceImpl implements AuthService {
         passwordResetTokenRepository.deleteAllByAccountId(account.getId());
 
         /** Tạo token mới. */
-        String rawToken = generateResetToken();
+        String rawToken = SecureTokenUtils.generate();
         passwordResetTokenRepository.save(PasswordResetToken.builder()
                 .account(account)
-                .tokenHash(sha256Hex(rawToken))
+                .tokenHash(SecureTokenUtils.sha256Hex(rawToken))
                 .expiresAt(now.plusMinutes(resetExpirationMinutes))
                 .createdAt(now)
                 .build());
@@ -164,7 +178,7 @@ public class AuthServiceImpl implements AuthService {
 
         /** Kiểm tra token hợp lệ. */
         PasswordResetToken token = passwordResetTokenRepository
-                .findByTokenHash(sha256Hex(request.getToken().trim()))
+                .findByTokenHash(SecureTokenUtils.sha256Hex(request.getToken().trim()))
                 .orElseThrow(() -> new IllegalArgumentException(INVALID_RESET_TOKEN_MESSAGE));
         /** Kiểm tra token có hết hạn không. */
         if (token.getExpiresAt().isBefore(LocalDateTime.now())) {
@@ -176,6 +190,7 @@ public class AuthServiceImpl implements AuthService {
         account.setPassword(passwordEncoder.encode(request.getNewPassword()));
         accountRepository.save(account);
         passwordResetTokenRepository.deleteAllByAccountId(account.getId());
+        refreshTokenService.revokeAll(account.getId(), TokenRevokeReason.PASSWORD_CHANGED);
     }
 
     private String buildResetUrl(String rawToken) {
@@ -184,21 +199,6 @@ public class AuthServiceImpl implements AuthService {
             base = base.substring(0, base.length() - 1);
         }
         return base + "/reset-password?token=" + rawToken;
-    }
-
-    private static String generateResetToken() {
-        byte[] bytes = new byte[32];
-        SECURE_RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
-
-    private static String sha256Hex(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 không khả dụng", e);
-        }
     }
 
     private LoginResponse buildLoginResponse(CustomUserDetails userDetails, String accessToken) {

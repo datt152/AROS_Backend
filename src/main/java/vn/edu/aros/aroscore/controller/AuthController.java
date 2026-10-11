@@ -15,10 +15,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import vn.edu.aros.aroscore.dto.request.ForgotPasswordRequest;
 import vn.edu.aros.aroscore.dto.request.LoginRequest;
+import vn.edu.aros.aroscore.dto.request.RefreshTokenRequest;
 import vn.edu.aros.aroscore.dto.request.RegisterRequest;
 import vn.edu.aros.aroscore.dto.request.ResetPasswordRequest;
 import vn.edu.aros.aroscore.dto.response.AuthSession;
 import vn.edu.aros.aroscore.dto.response.LoginResponse;
+import vn.edu.aros.aroscore.entity.enums.AuthClientType;
 import vn.edu.aros.aroscore.service.AuthService;
 import vn.edu.aros.aroscore.utils.JwtUtils;
 
@@ -29,7 +31,11 @@ import java.time.Duration;
 public class AuthController {
 
     public static final String REFRESH_COOKIE_NAME = "refreshToken";
-    public static final String REFRESH_COOKIE_PATH = "/api/v1/auth/refresh";
+    /** Phải bao cả /refresh và /logout để server đọc được token khi đăng xuất. */
+    public static final String REFRESH_COOKIE_PATH = "/api/v1/auth";
+    /** Cookie cũ (trước khi đổi path) vẫn được trình duyệt gửi trước cookie mới nên phải xóa đi. */
+    private static final String LEGACY_REFRESH_COOKIE_PATH = "/api/v1/auth/refresh";
+    public static final String CLIENT_TYPE_HEADER = "X-Client-Type";
 
     @Autowired
     private AuthService authService;
@@ -51,27 +57,37 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.CREATED).body("Đăng ký tài khoản thành công!");
     }
 
+    /**
+     * Web: refresh token trả qua cookie httpOnly.
+     * Mobile (header {@code X-Client-Type: mobile}): refresh token trả trong body.
+     */
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        AuthSession session = authService.authenticateUser(request);
-        ResponseCookie refreshCookie = buildRefreshCookie(
-                session.getRefreshToken(), jwtUtils.getRefreshExpirationSeconds());
-        return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
-                .body(session.getLoginResponse());
+    public ResponseEntity<LoginResponse> login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest) {
+        AuthClientType clientType = resolveClientType(httpRequest);
+        AuthSession session = authService.authenticateUser(request, clientType);
+        return buildSessionResponse(session, clientType);
     }
 
+    /** Mỗi lần refresh sẽ cấp refresh token mới, token cũ bị vô hiệu. */
     @PostMapping("/refresh")
-    public ResponseEntity<LoginResponse> refresh(HttpServletRequest request) {
-        LoginResponse response = authService.refreshAccessToken(extractRefreshToken(request));
-        return ResponseEntity.ok(response);
+    public ResponseEntity<LoginResponse> refresh(
+            @RequestBody(required = false) RefreshTokenRequest body,
+            HttpServletRequest httpRequest) {
+        AuthSession session = authService.refreshSession(extractRefreshToken(body, httpRequest));
+        return buildSessionResponse(session, resolveClientType(httpRequest));
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<String> logout() {
-        ResponseCookie expiredCookie = buildRefreshCookie("", 0);
+    public ResponseEntity<String> logout(
+            @RequestBody(required = false) RefreshTokenRequest body,
+            HttpServletRequest httpRequest) {
+        authService.logout(extractRefreshToken(body, httpRequest));
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, expiredCookie.toString())
+                .header(HttpHeaders.SET_COOKIE,
+                        buildRefreshCookie("", 0, REFRESH_COOKIE_PATH).toString(),
+                        buildRefreshCookie("", 0, LEGACY_REFRESH_COOKIE_PATH).toString())
                 .body("Đăng xuất thành công!");
     }
 
@@ -93,23 +109,54 @@ public class AuthController {
         return ResponseEntity.ok("Đặt lại mật khẩu thành công!");
     }
 
-    private ResponseCookie buildRefreshCookie(String refreshToken, long maxAgeSeconds) {
+    private ResponseEntity<LoginResponse> buildSessionResponse(AuthSession session, AuthClientType clientType) {
+        LoginResponse body = session.getLoginResponse();
+        String refreshToken = session.getRefreshToken();
+
+        if (clientType == AuthClientType.MOBILE) {
+            body.setRefreshToken(refreshToken);
+            return ResponseEntity.ok(body);
+        }
+        // null = refresh song song trong khoảng ân hạn, trình duyệt đã có cookie mới từ request kia
+        if (refreshToken == null) {
+            return ResponseEntity.ok(body);
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE,
+                        buildRefreshCookie(refreshToken, jwtUtils.getRefreshExpirationSeconds(), REFRESH_COOKIE_PATH)
+                                .toString(),
+                        buildRefreshCookie("", 0, LEGACY_REFRESH_COOKIE_PATH).toString())
+                .body(body);
+    }
+
+    private ResponseCookie buildRefreshCookie(String refreshToken, long maxAgeSeconds, String path) {
         return ResponseCookie.from(REFRESH_COOKIE_NAME, refreshToken)
                 .httpOnly(true)
                 .secure(refreshCookieSecure)
                 .sameSite(refreshCookieSameSite)
-                .path(REFRESH_COOKIE_PATH)
+                .path(path)
                 .maxAge(Duration.ofSeconds(maxAgeSeconds))
                 .build();
     }
 
-    private String extractRefreshToken(HttpServletRequest request) {
+    private AuthClientType resolveClientType(HttpServletRequest request) {
+        return "mobile".equalsIgnoreCase(request.getHeader(CLIENT_TYPE_HEADER))
+                ? AuthClientType.MOBILE
+                : AuthClientType.WEB;
+    }
+
+    /** Ưu tiên body (mobile), sau đó tới cookie (web). */
+    private String extractRefreshToken(RefreshTokenRequest body, HttpServletRequest request) {
+        if (body != null && body.getRefreshToken() != null && !body.getRefreshToken().isBlank()) {
+            return body.getRefreshToken();
+        }
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {
             return null;
         }
         for (Cookie cookie : cookies) {
-            if (REFRESH_COOKIE_NAME.equals(cookie.getName())) {
+            if (REFRESH_COOKIE_NAME.equals(cookie.getName())
+                    && cookie.getValue() != null && !cookie.getValue().isBlank()) {
                 return cookie.getValue();
             }
         }

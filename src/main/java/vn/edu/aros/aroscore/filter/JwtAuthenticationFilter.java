@@ -42,6 +42,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 // Lấy thông tin chi tiết của user từ Database
                 UserDetails userDetails = customUserDetailsService.loadUserByUsername(email);
 
+                // Tài khoản bị vô hiệu hóa thì access token còn hạn cũng không được dùng
+                if (!userDetails.isEnabled()) {
+                    throw new IllegalStateException("Tài khoản đã bị vô hiệu hóa: " + email);
+                }
+
                 // Báo cho Spring Security Jwt hợp lệ
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());

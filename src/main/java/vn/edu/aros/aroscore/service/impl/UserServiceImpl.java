@@ -11,9 +11,11 @@ import vn.edu.aros.aroscore.dto.request.UpdateStudentCodeRequest;
 import vn.edu.aros.aroscore.dto.response.UserResponse;
 import vn.edu.aros.aroscore.entity.Account;
 import vn.edu.aros.aroscore.entity.User;
+import vn.edu.aros.aroscore.entity.enums.TokenRevokeReason;
 import vn.edu.aros.aroscore.entity.enums.UserRole;
 import vn.edu.aros.aroscore.repository.AccountRepository;
 import vn.edu.aros.aroscore.repository.UserRepository;
+import vn.edu.aros.aroscore.service.RefreshTokenService;
 import vn.edu.aros.aroscore.service.StudentCodeService;
 import vn.edu.aros.aroscore.service.UserService;
 
@@ -25,6 +27,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final StudentCodeService studentCodeService;
     private final PasswordEncoder passwordEncoder;
+    private final RefreshTokenService refreshTokenService;
 
     @Override
     @Transactional(readOnly = true)
@@ -87,6 +90,8 @@ public class UserServiceImpl implements UserService {
 
         account.setPassword(passwordEncoder.encode(request.getNewPassword()));
         accountRepository.save(account);
+        // Đăng xuất mọi thiết bị (kể cả thiết bị hiện tại) — FE nên đưa người dùng về trang đăng nhập
+        refreshTokenService.revokeAll(account.getId(), TokenRevokeReason.PASSWORD_CHANGED);
     }
 
     private Account loadCurrentAccount() {
