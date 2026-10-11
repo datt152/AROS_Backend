@@ -3,6 +3,7 @@ package vn.edu.aros.aroscore.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.InternalAuthenticationServiceException;
@@ -93,6 +94,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleAuthenticationException(
             AuthenticationException ex, WebRequest request) {
         return authError(HttpStatus.UNAUTHORIZED, LOGIN_FAILED_MESSAGE, request);
+    }
+
+    /** @PreAuthorize từ chối (sai role) — nếu không bắt ở đây sẽ rơi vào handler Exception và thành 500. */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex, WebRequest request) {
+        return authError(HttpStatus.FORBIDDEN, "Bạn không có quyền truy cập chức năng này", request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
