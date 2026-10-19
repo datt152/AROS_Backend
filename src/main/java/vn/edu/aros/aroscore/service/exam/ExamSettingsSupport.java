@@ -15,7 +15,16 @@ public final class ExamSettingsSupport {
     private ExamSettingsSupport() {
     }
 
+    /**
+     * Trạng thái hiệu lực theo lịch (UPCOMING/ONGOING có thể đã thành CLOSED dù DB chưa kịp sync).
+     * Dùng cho mọi API đọc / chặn làm bài.
+     */
     public static ExamStatus onlineStatus(Exam exam) {
+        return ExamStatusLifecycle.effectiveStatus(exam, LocalDateTime.now());
+    }
+
+    /** Giá trị đang lưu trong DB (trước khi sync). */
+    public static ExamStatus storedOnlineStatus(Exam exam) {
         OnlineExamSettings s = exam.getOnlineSettings();
         return s != null && s.getStatus() != null ? s.getStatus() : ExamStatus.DRAFT;
     }

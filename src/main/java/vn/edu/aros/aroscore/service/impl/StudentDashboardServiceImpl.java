@@ -23,6 +23,7 @@ import vn.edu.aros.aroscore.repository.SubmissionRepository;
 import vn.edu.aros.aroscore.repository.UserRepository;
 import vn.edu.aros.aroscore.service.StudentDashboardService;
 import vn.edu.aros.aroscore.service.exam.ExamSettingsSupport;
+import vn.edu.aros.aroscore.service.exam.ExamStatusLifecycle;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -440,8 +441,8 @@ public class StudentDashboardServiceImpl implements StudentDashboardService {
     }
 
     private static boolean isExamScheduleOpen(Exam exam, LocalDateTime now) {
-        ExamStatus status = ExamSettingsSupport.onlineStatus(exam);
-        if (status == ExamStatus.CLOSED || status == ExamStatus.COMPLETED || status == ExamStatus.DRAFT) {
+        ExamStatus status = ExamStatusLifecycle.effectiveStatus(exam, now);
+        if (!ExamStatusLifecycle.isOpenForTaking(status)) {
             return false;
         }
         LocalDateTime startAt = ExamSettingsSupport.startAt(exam);
@@ -449,30 +450,21 @@ public class StudentDashboardServiceImpl implements StudentDashboardService {
         if (startAt != null && now.isBefore(startAt)) {
             return false;
         }
-        if (endAt != null && now.isAfter(endAt)) {
-            return false;
-        }
-        // UPCOMING nhưng chưa tới startAt đã chặn; ONGOING/UPCOMING trong cửa sổ OK
-        return status == ExamStatus.ONGOING || status == ExamStatus.UPCOMING;
+        return endAt == null || !now.isAfter(endAt);
     }
 
     private static String resolvePhase(
             ExamStatus status, LocalDateTime start, LocalDateTime end, LocalDateTime now) {
-        if (status == ExamStatus.CLOSED || status == ExamStatus.COMPLETED) {
+        ExamStatus effective = ExamStatusLifecycle.effectiveStatus(status, start, end, now);
+        if (ExamStatusLifecycle.isTerminal(effective)) {
             return "CLOSED";
         }
-        if (status == ExamStatus.UPCOMING || (start != null && now.isBefore(start))) {
+        if (effective == ExamStatus.UPCOMING || (start != null && now.isBefore(start))) {
             return "UPCOMING";
         }
-        if (end != null && now.isAfter(end)) {
-            return "CLOSED";
-        }
-        if (status == ExamStatus.ONGOING || (start == null || !now.isBefore(start))) {
-            if (end != null && !end.isBefore(now)
-                    && ChronoUnit.HOURS.between(now, end) <= ENDING_SOON_HOURS) {
-                return "ENDING_SOON";
-            }
-            return "ONGOING";
+        if (end != null && !end.isBefore(now)
+                && ChronoUnit.HOURS.between(now, end) <= ENDING_SOON_HOURS) {
+            return "ENDING_SOON";
         }
         return "ONGOING";
     }

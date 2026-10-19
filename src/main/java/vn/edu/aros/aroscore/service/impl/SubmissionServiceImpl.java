@@ -21,10 +21,12 @@ import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 import vn.edu.aros.aroscore.entity.enums.GradingStatus;
 import vn.edu.aros.aroscore.service.exam.ExamSettingsSupport;
+import vn.edu.aros.aroscore.service.exam.ExamStatusLifecycle;
 import vn.edu.aros.aroscore.repository.ClassroomRepository;
 import vn.edu.aros.aroscore.repository.ExamVersionRepository;
 import vn.edu.aros.aroscore.repository.SubmissionRepository;
 import vn.edu.aros.aroscore.repository.UserRepository;
+import vn.edu.aros.aroscore.service.ExamStatusSyncService;
 import vn.edu.aros.aroscore.service.SubmissionService;
 
 import java.time.LocalDateTime;
@@ -45,6 +47,7 @@ public class SubmissionServiceImpl implements SubmissionService {
     private final SubmissionRepository submissionRepository;
     private final ExamVersionRepository examVersionRepository;
     private final ClassroomRepository classroomRepository;
+    private final ExamStatusSyncService examStatusSyncService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final UserRepository userRepository;
 
@@ -65,8 +68,9 @@ public class SubmissionServiceImpl implements SubmissionService {
             throw new RuntimeException("Đề OMR không nộp online");
         }
 
+        examStatusSyncService.syncExam(exam);
         ExamStatus status = ExamSettingsSupport.onlineStatus(exam);
-        if (status == ExamStatus.CLOSED || status == ExamStatus.COMPLETED) {
+        if (ExamStatusLifecycle.isTerminal(status)) {
             throw new RuntimeException("Bài thi đã kết thúc hoặc đã đóng!");
         }
 

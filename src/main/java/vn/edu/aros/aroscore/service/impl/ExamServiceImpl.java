@@ -30,8 +30,10 @@ import vn.edu.aros.aroscore.entity.enums.QuestionType;
 import vn.edu.aros.aroscore.mapper.ExamMapper;
 import vn.edu.aros.aroscore.repository.*;
 import vn.edu.aros.aroscore.service.ExamService;
+import vn.edu.aros.aroscore.service.ExamStatusSyncService;
 import vn.edu.aros.aroscore.service.exam.ExamPaperPdfRenderer;
 import vn.edu.aros.aroscore.service.exam.ExamSettingsSupport;
+import vn.edu.aros.aroscore.service.exam.ExamStatusLifecycle;
 import vn.edu.aros.aroscore.service.omr.OmrExamValidator;
 
 import java.time.format.DateTimeFormatter;
@@ -63,6 +65,7 @@ public class ExamServiceImpl implements ExamService {
     private final ClassroomRepository classroomRepository;
     private final OmrExamValidator omrExamValidator;
     private final ExamPaperPdfRenderer examPaperPdfRenderer;
+    private final ExamStatusSyncService examStatusSyncService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private String getCurrentUserEmail() {
@@ -101,9 +104,11 @@ public class ExamServiceImpl implements ExamService {
     }
 
     private OnlineExamSettingsResponse toOnlineSettingsResponse(OnlineExamSettings settings) {
+        ExamStatus effective = ExamStatusLifecycle.effectiveStatus(
+                settings.getStatus(), settings.getStartAt(), settings.getEndAt(), LocalDateTime.now());
         return OnlineExamSettingsResponse.builder()
                 .id(settings.getId())
-                .status(settings.getStatus())
+                .status(effective)
                 .startAt(settings.getStartAt())
                 .endAt(settings.getEndAt())
                 .allowEdit(settings.getAllowEdit())
@@ -254,22 +259,24 @@ public class ExamServiceImpl implements ExamService {
             throw new RuntimeException("Đề OMR không làm trên web");
         }
 
+        examStatusSyncService.syncExam(exam);
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startAt = ExamSettingsSupport.startAt(exam);
+        LocalDateTime endAt = ExamSettingsSupport.endAt(exam);
+        if (endAt != null && now.isAfter(endAt)) {
+            throw new RuntimeException("Bài thi đã hết hạn!");
+        }
+
         ExamStatus status = ExamSettingsSupport.onlineStatus(exam);
-        if (status == ExamStatus.CLOSED || status == ExamStatus.COMPLETED) {
+        if (ExamStatusLifecycle.isTerminal(status)) {
             throw new RuntimeException("Bài thi đã kết thúc hoặc đã đóng!");
         }
         if (status == ExamStatus.DRAFT) {
             throw new RuntimeException("Bài thi chưa được mở. Giáo viên cần đổi trạng thái trước khi làm bài!");
         }
-
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime startAt = ExamSettingsSupport.startAt(exam);
-        LocalDateTime endAt = ExamSettingsSupport.endAt(exam);
         if (startAt != null && now.isBefore(startAt)) {
             throw new RuntimeException("Bài thi chưa đến thời gian mở!");
-        }
-        if (endAt != null && now.isAfter(endAt)) {
-            throw new RuntimeException("Bài thi đã hết hạn!");
         }
     }
 
@@ -1026,6 +1033,8 @@ public class ExamServiceImpl implements ExamService {
             if (exam.getExamMode() == ExamMode.ONLINE
                     && exam.getOnlineSettings() != null
                     && (requestedStatus == ExamStatus.CLOSED || requestedStatus == ExamStatus.COMPLETED)) {
+                ExamStatusLifecycle.assertManualTransition(
+                        ExamSettingsSupport.storedOnlineStatus(exam), requestedStatus);
                 assertCanPublish(exam, requestedStatus);
                 exam.getOnlineSettings().setStatus(requestedStatus);
                 return toFullResponse(examRepository.save(exam));
@@ -1060,6 +1069,8 @@ public class ExamServiceImpl implements ExamService {
             } else if (request.getOnlineSettings() != null) {
                 OnlineExamSettingsRequest onlineRequest = request.getOnlineSettings();
                 if (onlineRequest.getStatus() != null) {
+                    ExamStatusLifecycle.assertManualTransition(
+                            ExamSettingsSupport.storedOnlineStatus(exam), onlineRequest.getStatus());
                     assertCanPublish(exam, onlineRequest.getStatus());
                 }
                 applyOnlineSettingsRequest(exam.getOnlineSettings(), onlineRequest);
@@ -1074,6 +1085,8 @@ public class ExamServiceImpl implements ExamService {
             if (startAt != null && endAt != null && endAt.isBefore(startAt)) {
                 throw new RuntimeException("Thời gian kết thúc phải sau thời gian bắt đầu!");
             }
+            // Áp lịch ngay: UPCOMING→ONGOING / hết endAt→CLOSED
+            ExamStatusLifecycle.syncStoredStatus(exam, LocalDateTime.now());
         } else {
             exam.setOnlineSettings(null);
             if (exam.getPaperSettings() == null) {
@@ -1381,7 +1394,7 @@ public class ExamServiceImpl implements ExamService {
             return false;
         }
         ExamStatus status = ExamSettingsSupport.onlineStatus(exam);
-        if (status == ExamStatus.CLOSED || status == ExamStatus.COMPLETED || status == ExamStatus.DRAFT) {
+        if (!ExamStatusLifecycle.isOpenForTaking(status)) {
             return false;
         }
         LocalDateTime now = LocalDateTime.now();

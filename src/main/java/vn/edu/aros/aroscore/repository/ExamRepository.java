@@ -11,6 +11,8 @@ import vn.edu.aros.aroscore.entity.enums.ExamMode;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -137,4 +139,27 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
               AND e.purpose = vn.edu.aros.aroscore.entity.enums.ExamPurpose.EXAM
             """)
     java.util.List<Exam> findExamPurposeByTeacherEmail(@Param("email") String email);
+
+    /**
+     * Đề ONLINE đang UPCOMING/ONGOING và lịch đòi hỏi đổi status
+     * (hết endAt → CLOSED, hoặc đã tới startAt mà vẫn UPCOMING).
+     */
+    @Query("""
+            SELECT e FROM Exam e
+            JOIN FETCH e.onlineSettings os
+            WHERE e.examMode = vn.edu.aros.aroscore.entity.enums.ExamMode.ONLINE
+              AND os.status IN (
+                    vn.edu.aros.aroscore.entity.enums.ExamStatus.UPCOMING,
+                    vn.edu.aros.aroscore.entity.enums.ExamStatus.ONGOING)
+              AND (
+                    (os.endAt IS NOT NULL AND os.endAt < :now)
+                 OR (os.status = vn.edu.aros.aroscore.entity.enums.ExamStatus.UPCOMING
+                     AND (os.startAt IS NULL OR os.startAt <= :now)
+                     AND (os.endAt IS NULL OR os.endAt >= :now))
+                 OR (os.status = vn.edu.aros.aroscore.entity.enums.ExamStatus.ONGOING
+                     AND os.startAt IS NOT NULL AND os.startAt > :now
+                     AND (os.endAt IS NULL OR os.endAt >= :now))
+              )
+            """)
+    List<Exam> findOnlineExamsNeedingStatusSync(@Param("now") LocalDateTime now);
 }

@@ -27,6 +27,7 @@ import vn.edu.aros.aroscore.repository.QuestionRepository;
 import vn.edu.aros.aroscore.repository.SubjectRepository;
 import vn.edu.aros.aroscore.service.TeacherDashboardService;
 import vn.edu.aros.aroscore.service.exam.ExamSettingsSupport;
+import vn.edu.aros.aroscore.service.exam.ExamStatusLifecycle;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -265,12 +266,12 @@ public class TeacherDashboardServiceImpl implements TeacherDashboardService {
             status = resolveOmrPhaseStatus(date, now.toLocalDate());
         } else {
             OnlineExamSettings online = exam.getOnlineSettings();
-            status = online != null && online.getStatus() != null ? online.getStatus() : ExamStatus.DRAFT;
+            start = online != null ? online.getStartAt() : null;
+            end = online != null ? online.getEndAt() : null;
+            status = ExamSettingsSupport.onlineStatus(exam);
             if (status == ExamStatus.DRAFT) {
                 return null;
             }
-            start = online != null ? online.getStartAt() : null;
-            end = online != null ? online.getEndAt() : null;
             if (start == null && end == null) {
                 return null;
             }
@@ -307,26 +308,15 @@ public class TeacherDashboardServiceImpl implements TeacherDashboardService {
 
     private static String resolvePhase(
             ExamStatus status, LocalDateTime start, LocalDateTime end, LocalDateTime now) {
-        if (status == ExamStatus.CLOSED || status == ExamStatus.COMPLETED) {
+        ExamStatus effective = ExamStatusLifecycle.effectiveStatus(status, start, end, now);
+        if (ExamStatusLifecycle.isTerminal(effective)) {
             return "CLOSED";
         }
-        if (status == ExamStatus.UPCOMING) {
+        if (effective == ExamStatus.UPCOMING || (start != null && now.isBefore(start))) {
             return "UPCOMING";
         }
-        if (status == ExamStatus.ONGOING) {
-            if (end != null && !end.isBefore(now)
-                    && ChronoUnit.HOURS.between(now, end) <= ENDING_SOON_HOURS) {
-                return "ENDING_SOON";
-            }
-            return "ONGOING";
-        }
-        if (start != null && now.isBefore(start)) {
-            return "UPCOMING";
-        }
-        if (end != null && now.isAfter(end)) {
-            return "CLOSED";
-        }
-        if (end != null && ChronoUnit.HOURS.between(now, end) <= ENDING_SOON_HOURS) {
+        if (end != null && !end.isBefore(now)
+                && ChronoUnit.HOURS.between(now, end) <= ENDING_SOON_HOURS) {
             return "ENDING_SOON";
         }
         return "ONGOING";
