@@ -28,6 +28,16 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
 
     long countByExamAndSubmitTimeIsNotNull(Exam exam);
 
+    @Query("""
+            SELECT COUNT(s) FROM Submission s
+            WHERE s.exam.id = :examId
+              AND s.classroom.id = :classroomId
+              AND s.submitTime IS NOT NULL
+            """)
+    long countSubmittedByExamIdAndClassroomId(
+            @Param("examId") Long examId,
+            @Param("classroomId") Long classroomId);
+
     List<Submission> findByExam(Exam exam);
 
     @Query("""
