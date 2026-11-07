@@ -89,10 +89,6 @@ public class OMRFile {
     @Builder.Default
     private List<OmrAnswerDetail> answerDetails = new ArrayList<>();
 
-    @OneToMany(mappedBy = "omrFile", cascade = CascadeType.ALL)
-    @Builder.Default
-    private List<OMRResult> results = new ArrayList<>();
-
     public void addAnswerDetail(OmrAnswerDetail detail) {
         answerDetails.add(detail);
         detail.setOmrFile(this);

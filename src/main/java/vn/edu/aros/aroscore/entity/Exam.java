@@ -82,8 +82,6 @@ public class Exam {
     @JoinColumn(name = "template_id")
     private ExamTemplate sourceTemplate;
 
-    private String imageUrl;
-
     @Column(name = "max_score", nullable = false)
     @Builder.Default
     private Double maxScore = 10.0;

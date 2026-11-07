@@ -89,7 +89,7 @@ public class SecurityConfig {
                         auth
                                 // Cho phép vào tự do các API liên quan đến Auth
                                 .requestMatchers("/api/v1/auth/**").permitAll()
-                                .requestMatchers("/api/test", "/actuator/health").permitAll()
+                                .requestMatchers("/actuator/health").permitAll()
 
                                 // Mở cửa hoàn toàn cho Swagger UI
                                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
