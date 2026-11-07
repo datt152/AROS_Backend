@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import vn.edu.aros.aroscore.config.AgentProperties;
 import vn.edu.aros.aroscore.config.GeminiProperties;
 import vn.edu.aros.aroscore.dto.response.AgentRunCreatedResponse;
@@ -16,13 +18,14 @@ import vn.edu.aros.aroscore.entity.ClassInsight;
 import vn.edu.aros.aroscore.entity.Classroom;
 import vn.edu.aros.aroscore.entity.Exam;
 import vn.edu.aros.aroscore.entity.enums.AgentRunStatus;
-import vn.edu.aros.aroscore.entity.enums.ExamMode;
+import vn.edu.aros.aroscore.exception.ResourceNotFoundException;
 import vn.edu.aros.aroscore.repository.AgentRunRepository;
 import vn.edu.aros.aroscore.repository.AgentStepRepository;
 import vn.edu.aros.aroscore.repository.ClassInsightRepository;
 import vn.edu.aros.aroscore.repository.ExamRepository;
 import vn.edu.aros.aroscore.repository.SubmissionRepository;
 import vn.edu.aros.aroscore.service.ClassAnalysisAgentService;
+import vn.edu.aros.aroscore.service.agent.ClassAnalysisAgentOrchestrator;
 
 import java.util.List;
 
@@ -37,6 +40,7 @@ public class ClassAnalysisAgentServiceImpl implements ClassAnalysisAgentService 
     private final ClassInsightRepository classInsightRepository;
     private final AgentProperties agentProperties;
     private final GeminiProperties geminiProperties;
+    private final ClassAnalysisAgentOrchestrator agentOrchestrator;
 
     private String currentEmail() {
         return SecurityContextHolder.getContext().getAuthentication().getName();
@@ -48,10 +52,6 @@ public class ClassAnalysisAgentServiceImpl implements ClassAnalysisAgentService 
         String email = currentEmail();
         Exam exam = examRepository.findByIdAndTeacherEmail(examId, email)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đề thi hoặc bạn không có quyền!"));
-
-        if (exam.getExamMode() == ExamMode.OMR_PAPER) {
-            throw new IllegalArgumentException("Agent phân tích hiện chỉ hỗ trợ đề ONLINE!");
-        }
 
         Classroom classroom = resolveAssignedClassroom(exam, classroomId);
 
@@ -75,13 +75,25 @@ public class ClassAnalysisAgentServiceImpl implements ClassAnalysisAgentService 
                 .goal("Phân tích kết quả làm bài của lớp \"" + classroom.getClassName()
                         + "\" cho đề \"" + exam.getTitle() + "\".")
                 .build();
-        agentRunRepository.save(run);
+        agentRunRepository.saveAndFlush(run);
+        Long runId = run.getId();
 
-        // Đoạn 2: kích hoạt @Async Gemini tool-calling loop tại đây.
+        // Phải chờ commit xong mới @Async — nếu gọi ngay, thread khác chưa thấy row (race).
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    agentOrchestrator.executeAsync(runId);
+                }
+            });
+        } else {
+            agentOrchestrator.executeAsync(runId);
+        }
+
         return AgentRunCreatedResponse.builder()
-                .runId(run.getId())
-                .status(run.getStatus())
-                .message("Đã tạo agent run. Orchestrator Gemini sẽ được nối ở bước tiếp theo.")
+                .runId(runId)
+                .status(AgentRunStatus.PENDING)
+                .message("Đã tạo agent run. Hệ thống đang gọi Gemini và các tool phân tích.")
                 .build();
     }
 
@@ -112,7 +124,7 @@ public class ClassAnalysisAgentServiceImpl implements ClassAnalysisAgentService 
         ClassInsight insight = classInsightRepository
                 .findFirstByExam_IdAndClassroom_IdAndExam_Teacher_EmailOrderByCreatedAtDesc(
                         examId, classroomId, email)
-                .orElseThrow(() -> new RuntimeException("Chưa có nhận xét Agent cho lớp này!"));
+                .orElseThrow(() -> new ResourceNotFoundException("Chưa có nhận xét Agent cho lớp này!"));
 
         return ClassInsightResponse.builder()
                 .id(insight.getId())

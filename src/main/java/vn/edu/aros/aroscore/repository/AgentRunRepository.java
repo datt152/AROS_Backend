@@ -16,4 +16,12 @@ public interface AgentRunRepository extends JpaRepository<AgentRun, Long> {
             WHERE r.id = :id AND e.teacher.email = :email
             """)
     Optional<AgentRun> findByIdAndTeacherEmail(@Param("id") Long id, @Param("email") String email);
+
+    @Query("""
+            SELECT r FROM AgentRun r
+            JOIN FETCH r.exam
+            JOIN FETCH r.classroom
+            WHERE r.id = :id
+            """)
+    Optional<AgentRun> findByIdWithExamAndClassroom(@Param("id") Long id);
 }
