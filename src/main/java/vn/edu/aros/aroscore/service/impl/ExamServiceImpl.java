@@ -798,9 +798,6 @@ public class ExamServiceImpl implements ExamService {
     public ExamStatsResponse getExamStats(Long examId, Long classroomId) {
         String email = getCurrentUserEmail();
         Exam exam = getOwnedExam(examId);
-        if (exam.getExamMode() != ExamMode.ONLINE) {
-            throw new RuntimeException("Thống kê bài thi chỉ áp dụng cho đề thi trực tuyến!");
-        }
 
         Long responseClassroomId = null;
         String responseClassroomName = null;
@@ -885,6 +882,7 @@ public class ExamServiceImpl implements ExamService {
         return ExamStatsResponse.builder()
                 .examId(exam.getId())
                 .examTitle(exam.getTitle())
+                .examMode(exam.getExamMode())
                 .maxScore(exam.getMaxScore())
                 .classroomId(responseClassroomId)
                 .classroomName(responseClassroomName)

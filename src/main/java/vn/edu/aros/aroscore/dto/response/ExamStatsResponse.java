@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import vn.edu.aros.aroscore.entity.enums.ExamMode;
 
 import java.util.List;
 
@@ -14,6 +15,7 @@ import java.util.List;
 public class ExamStatsResponse {
     private Long examId;
     private String examTitle;
+    private ExamMode examMode;
     private Double maxScore;
     private Long classroomId;
     private String classroomName;
