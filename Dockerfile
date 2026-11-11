@@ -22,9 +22,13 @@ FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-RUN addgroup -S aros && adduser -S aros -G aros \
+# Alpine không có tzdata mặc định — cần để LocalDateTime.now() theo giờ VN
+RUN apk add --no-cache tzdata \
+    && addgroup -S aros && adduser -S aros -G aros \
     && mkdir -p /tmp/uploads/omr \
     && chown -R aros:aros /app /tmp/uploads/omr
+
+ENV TZ=Asia/Ho_Chi_Minh
 
 USER aros
 
