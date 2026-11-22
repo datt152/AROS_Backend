@@ -38,3 +38,6 @@ build/
 .env.*.local
 
 docker-compose.yml
+
+# Tài liệu báo cáo thực tập / SRS (local only)
+docs/

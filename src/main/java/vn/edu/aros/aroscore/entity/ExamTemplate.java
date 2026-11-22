@@ -42,6 +42,19 @@ public class ExamTemplate {
     @Builder.Default
     private Boolean isActive = true;
 
+    /** Cờ đánh dấu đề mẫu dành cho OMR (chỉ câu SINGLE, tối đa 4 đáp án) */
+    @Column(name = "is_omr", nullable = false)
+    @Builder.Default
+    private Boolean isOmr = false;
+
+    /** Số đáp án tối đa cho phép trong đề này (4 cho OMR, 6 cho Online) */
+    @Column(name = "max_options")
+    private Integer maxOptions;
+
+    /** Tổng số câu hỏi trong template */
+    @Column(name = "total_questions")
+    private Integer totalQuestions;
+
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ExamTemplateQuestion> templateQuestions = new ArrayList<>();
@@ -51,6 +64,9 @@ public class ExamTemplate {
         this.createdAt = LocalDateTime.now();
         if (this.isActive == null) {
             this.isActive = true;
+        }
+        if (this.isOmr == null) {
+            this.isOmr = false;
         }
     }
 

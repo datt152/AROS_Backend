@@ -28,4 +28,7 @@ public class ExamTemplateCreateRequest {
     private List<TopicSelectionRequest> topicSelections;
 
     private Map<Long, Double> rawPoints;
+
+    /** Đánh dấu đề mẫu OMR (lưu vào entity + trả về response). */
+    private Boolean isOmr;
 }

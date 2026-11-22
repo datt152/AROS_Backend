@@ -20,6 +20,7 @@ import vn.edu.aros.aroscore.entity.enums.ExamMode;
 import vn.edu.aros.aroscore.entity.enums.ExamPurpose;
 import vn.edu.aros.aroscore.entity.enums.ExamStatus;
 import vn.edu.aros.aroscore.entity.enums.GradingStatus;
+import vn.edu.aros.aroscore.entity.enums.QuestionType;
 import vn.edu.aros.aroscore.service.exam.ExamSettingsSupport;
 import vn.edu.aros.aroscore.service.exam.ExamStatusLifecycle;
 import vn.edu.aros.aroscore.repository.ClassroomRepository;
@@ -354,8 +355,8 @@ public class SubmissionServiceImpl implements SubmissionService {
         return SubmissionDetailItemResponse.builder()
                 .questionId(question.getId())
                 .order(order)
-                .content(question.getContent())
-                .type(question.getType())
+                .content(resolveQuestionContent(matrix, question))
+                .type(resolveQuestionType(matrix, question))
                 .selectedAnswer(selectedAnswer)
                 .correctAnswer(revealAnswers ? correctAnswer : null)
                 .isCorrect(revealAnswers ? isCorrect : null)
@@ -381,17 +382,10 @@ public class SubmissionServiceImpl implements SubmissionService {
         }
         List<SubmissionDetailOptionResponse> options = new ArrayList<>();
         for (AnswerMapping mapping : matrix.getAnswerMappings()) {
-            String content = question.getOptions() == null
-                    ? ""
-                    : question.getOptions().stream()
-                    .filter(option -> option.getId().equals(mapping.getOriginalOptionId()))
-                    .map(AnswerOption::getContent)
-                    .findFirst()
-                    .orElse("");
             Boolean correct = Boolean.TRUE.equals(mapping.getIsCorrect());
             options.add(SubmissionDetailOptionResponse.builder()
                     .label(mapping.getNewLabel())
-                    .content(content)
+                    .content(resolveOptionContent(mapping, question))
                     .selected(selected.contains(mapping.getNewLabel()))
                     .correct(revealAnswers ? correct : null)
                     .build());
@@ -400,6 +394,38 @@ public class SubmissionServiceImpl implements SubmissionService {
                 SubmissionDetailOptionResponse::getLabel,
                 Comparator.nullsLast(String::compareTo)));
         return options;
+    }
+
+    private static String resolveQuestionContent(QuestionMatrix matrix, Question question) {
+        if (matrix != null && matrix.getContent() != null) {
+            return matrix.getContent();
+        }
+        return question != null ? question.getContent() : null;
+    }
+
+    private static QuestionType resolveQuestionType(
+            QuestionMatrix matrix, Question question) {
+        if (matrix != null && matrix.getType() != null) {
+            return matrix.getType();
+        }
+        return question != null ? question.getType() : null;
+    }
+
+    private static String resolveOptionContent(AnswerMapping mapping, Question question) {
+        if (mapping == null) {
+            return "";
+        }
+        if (mapping.getContent() != null) {
+            return mapping.getContent();
+        }
+        if (question == null || question.getOptions() == null) {
+            return "";
+        }
+        return question.getOptions().stream()
+                .filter(option -> option.getId().equals(mapping.getOriginalOptionId()))
+                .map(AnswerOption::getContent)
+                .findFirst()
+                .orElse("");
     }
 
     private StudentSubmissionItemResponse toStudentSubmissionItem(Submission submission) {

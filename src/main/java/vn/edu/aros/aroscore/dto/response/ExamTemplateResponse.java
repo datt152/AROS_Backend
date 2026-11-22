@@ -25,4 +25,8 @@ public class ExamTemplateResponse {
     private Map<Long, Double> rawPoints;
     private LocalDateTime createdAt;
     private Boolean isActive;
+    /** true = đề mẫu OMR, false = Online */
+    private Boolean isOmr;
+    /** Số đáp án tối đa (thường 4 OMR / 6 Online) */
+    private Integer maxOptions;
 }

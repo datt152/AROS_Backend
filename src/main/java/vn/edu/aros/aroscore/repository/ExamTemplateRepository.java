@@ -16,16 +16,22 @@ public interface ExamTemplateRepository extends JpaRepository<ExamTemplate, Long
     @Query("""
             SELECT t FROM ExamTemplate t
             WHERE t.teacher.email = :email AND t.isActive = true
+            AND (:isOmr IS NULL OR t.isOmr = :isOmr)
             """)
-    Page<ExamTemplate> findAllActiveByTeacherEmail(@Param("email") String email, Pageable pageable);
+    Page<ExamTemplate> findAllActiveByTeacherEmail(
+            @Param("email") String email,
+            @Param("isOmr") Boolean isOmr,
+            Pageable pageable);
 
     @Query("""
             SELECT t FROM ExamTemplate t
             WHERE t.teacher.email = :email AND t.isActive = true AND t.subject.id = :subjectId
+            AND (:isOmr IS NULL OR t.isOmr = :isOmr)
             """)
     Page<ExamTemplate> findAllActiveByTeacherEmailAndSubjectId(
             @Param("email") String email,
             @Param("subjectId") Long subjectId,
+            @Param("isOmr") Boolean isOmr,
             Pageable pageable);
 
     @Query("""

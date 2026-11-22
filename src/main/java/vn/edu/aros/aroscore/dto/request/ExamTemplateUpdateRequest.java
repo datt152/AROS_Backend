@@ -21,4 +21,7 @@ public class ExamTemplateUpdateRequest {
     private List<Long> questionIds;
 
     private Map<Long, Double> rawPoints;
+
+    /** Đánh dấu đề mẫu OMR. */
+    private Boolean isOmr;
 }

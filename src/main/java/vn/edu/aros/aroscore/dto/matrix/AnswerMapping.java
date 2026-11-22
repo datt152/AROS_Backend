@@ -11,4 +11,6 @@ public class AnswerMapping {
     private Long originalOptionId;
     private String newLabel;       // Nhãn mới sau khi trộn (Ví dụ: "A", "B", "C", "D")
     private Boolean isCorrect;
+    /** Nội dung đáp án đóng băng lúc sinh mã đề. */
+    private String content;
 }

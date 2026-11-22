@@ -77,4 +77,50 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
             WHERE q.id IN :ids
             """)
     List<Question> findByIdInWithOptions(@Param("ids") Collection<Long> ids);
+
+    /**
+     * Lấy câu hỏi tương thích OMR (SINGLE_CHOICE và <= 4 options)
+     * Dùng cho tạo đề thi mẫu OMR
+     */
+    @Query("""
+            SELECT DISTINCT q FROM Question q
+            WHERE q.subject.id = :subjectId
+            AND (:topicId IS NULL OR q.topic.id = :topicId)
+            AND q.type = vn.edu.aros.aroscore.entity.enums.QuestionType.SINGLE_CHOICE
+            AND q.isActive = true
+            AND SIZE(q.options) >= 2
+            AND SIZE(q.options) <= 4
+            """)
+    List<Question> findOmrCompatibleQuestions(
+            @Param("subjectId") Long subjectId,
+            @Param("topicId") Long topicId);
+
+    /**
+     * Đếm số câu hỏi tương thích OMR
+     */
+    @Query("""
+            SELECT COUNT(q) FROM Question q
+            WHERE q.subject.id = :subjectId
+            AND (:topicId IS NULL OR q.topic.id = :topicId)
+            AND q.type = vn.edu.aros.aroscore.entity.enums.QuestionType.SINGLE_CHOICE
+            AND q.isActive = true
+            AND SIZE(q.options) >= 2
+            AND SIZE(q.options) <= 4
+            """)
+    long countOmrCompatibleQuestions(
+            @Param("subjectId") Long subjectId,
+            @Param("topicId") Long topicId);
+
+    /**
+     * Lấy tất cả câu hỏi active theo subject và topic (cho đề Online)
+     */
+    @Query("""
+            SELECT DISTINCT q FROM Question q
+            WHERE q.subject.id = :subjectId
+            AND (:topicId IS NULL OR q.topic.id = :topicId)
+            AND q.isActive = true
+            """)
+    List<Question> findAllActiveBySubjectAndTopic(
+            @Param("subjectId") Long subjectId,
+            @Param("topicId") Long topicId);
 }

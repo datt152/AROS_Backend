@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import vn.edu.aros.aroscore.dto.request.CreateExamFromTemplateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamTemplateCreateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamTemplateUpdateRequest;
+import vn.edu.aros.aroscore.dto.request.TemplateGenerationRequest;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTemplateResponse;
 import vn.edu.aros.aroscore.service.ExamTemplateService;
@@ -42,10 +43,11 @@ public class ExamTemplateController {
     @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Page<ExamTemplateResponse>> getTemplates(
             @RequestParam(required = false) Long subjectId,
+            @RequestParam(required = false) Boolean isOmr,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(examTemplateService.getTemplates(subjectId, pageable));
+        return ResponseEntity.ok(examTemplateService.getTemplates(subjectId, isOmr, pageable));
     }
 
     @GetMapping("/{id}")
@@ -76,5 +78,17 @@ public class ExamTemplateController {
             @Valid @RequestBody CreateExamFromTemplateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(examTemplateService.createExamFromTemplate(id, request));
+    }
+
+    /**
+     * Tạo đề thi mẫu bằng cách random câu hỏi từ ngân hàng
+     * API này hỗ trợ cả đề Online và OMR
+     */
+    @PostMapping("/generate")
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<ExamTemplateResponse> generateRandomTemplate(
+            @Valid @RequestBody TemplateGenerationRequest request) {
+        ExamTemplateResponse response = examTemplateService.generateRandomTemplate(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

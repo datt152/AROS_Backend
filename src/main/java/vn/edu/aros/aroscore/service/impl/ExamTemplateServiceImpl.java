@@ -11,6 +11,7 @@ import vn.edu.aros.aroscore.dto.request.ExamTemplateCreateRequest;
 import vn.edu.aros.aroscore.dto.request.ExamTemplateUpdateRequest;
 import vn.edu.aros.aroscore.dto.request.OnlineExamSettingsRequest;
 import vn.edu.aros.aroscore.dto.request.PaperExamSettingsRequest;
+import vn.edu.aros.aroscore.dto.request.TemplateGenerationRequest;
 import vn.edu.aros.aroscore.dto.request.TopicSelectionRequest;
 import vn.edu.aros.aroscore.dto.response.ExamResponse;
 import vn.edu.aros.aroscore.dto.response.ExamTemplateResponse;
@@ -32,6 +33,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -71,11 +73,15 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         List<Long> questionIds = resolveQuestionIds(request, subject.getId(), email);
         List<Question> questions = loadAndValidateQuestions(questionIds, subject.getId(), null);
 
+        boolean isOmr = Boolean.TRUE.equals(request.getIsOmr());
         ExamTemplate template = ExamTemplate.builder()
                 .title(request.getTitle())
                 .subject(subject)
                 .teacher(teacher)
                 .isActive(true)
+                .isOmr(isOmr)
+                .maxOptions(isOmr ? 4 : 6)
+                .totalQuestions(questionIds.size())
                 .build();
 
         int order = 1;
@@ -110,6 +116,7 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
             rawPoints.put(questionId, raw);
         }
 
+        boolean isOmr = Boolean.TRUE.equals(request.getIsOmr());
         return ExamTemplateResponse.builder()
                 .title(request.getTitle())
                 .subjectId(subject.getId())
@@ -119,6 +126,8 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
                 .questionIds(questionIds)
                 .rawPoints(rawPoints)
                 .isActive(true)
+                .isOmr(isOmr)
+                .maxOptions(isOmr ? 4 : 6)
                 .build();
     }
 
@@ -128,7 +137,11 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
                 : TemplateSelectionMode.MANUAL;
 
         if (mode == TemplateSelectionMode.BY_TOPIC) {
-            return pickQuestionsByTopic(request.getTopicSelections(), subjectId, email);
+            return pickQuestionsByTopic(
+                    request.getTopicSelections(),
+                    subjectId,
+                    email,
+                    Boolean.TRUE.equals(request.getIsOmr()));
         }
 
         if (request.getQuestionIds() == null || request.getQuestionIds().isEmpty()) {
@@ -140,7 +153,8 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
     private List<Long> pickQuestionsByTopic(
             List<TopicSelectionRequest> topicSelections,
             Long subjectId,
-            String email) {
+            String email,
+            boolean isOmr) {
         if (topicSelections == null || topicSelections.isEmpty()) {
             throw new IllegalArgumentException("Vui lòng chọn danh sách chủ đề");
         }
@@ -169,10 +183,16 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
                         "Chủ đề không thuộc môn học đã chọn!");
             }
 
-            List<Question> pool = questionRepository.findActiveByTopicSubjectAndTeacher(
-                    topic.getId(), subjectId, email);
-            // Loại câu đã chọn ở topic khác (phòng trường hợp dữ liệu lệch topic)
-            List<Question> available = pool.stream()
+            // OMR: pool DISTINCT tương thích; Online: câu active theo GV
+            List<Question> rawPool = isOmr
+                    ? questionRepository.findOmrCompatibleQuestions(subjectId, topic.getId())
+                    : questionRepository.findActiveByTopicSubjectAndTeacher(
+                            topic.getId(), subjectId, email);
+            Map<Long, Question> uniquePool = new LinkedHashMap<>();
+            for (Question q : rawPool) {
+                uniquePool.putIfAbsent(q.getId(), q);
+            }
+            List<Question> available = uniquePool.values().stream()
                     .filter(q -> !pickedSet.contains(q.getId()))
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -226,11 +246,11 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ExamTemplateResponse> getTemplates(Long subjectId, Pageable pageable) {
+    public Page<ExamTemplateResponse> getTemplates(Long subjectId, Boolean isOmr, Pageable pageable) {
         String email = getCurrentUserEmail();
         Page<ExamTemplate> page = subjectId != null
-                ? examTemplateRepository.findAllActiveByTeacherEmailAndSubjectId(email, subjectId, pageable)
-                : examTemplateRepository.findAllActiveByTeacherEmail(email, pageable);
+                ? examTemplateRepository.findAllActiveByTeacherEmailAndSubjectId(email, subjectId, isOmr, pageable)
+                : examTemplateRepository.findAllActiveByTeacherEmail(email, isOmr, pageable);
         return page.map(this::toResponse);
     }
 
@@ -253,6 +273,11 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
 
         template.setTitle(request.getTitle());
         template.setSubject(subject);
+        if (request.getIsOmr() != null) {
+            boolean isOmr = Boolean.TRUE.equals(request.getIsOmr());
+            template.setIsOmr(isOmr);
+            template.setMaxOptions(isOmr ? 4 : 6);
+        }
 
         template.getTemplateQuestions().clear();
         int order = 1;
@@ -264,6 +289,7 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
             }
             template.addQuestion(q, order++, raw);
         }
+        template.setTotalQuestions(request.getQuestionIds().size());
 
         return toResponse(examTemplateRepository.save(template));
     }
@@ -461,14 +487,22 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
                 .sorted(Comparator.comparing(ExamTemplateQuestion::getQuestionOrder, Comparator.nullsLast(Integer::compareTo)))
                 .toList();
 
-        List<Long> questionIds = ordered.stream()
-                .map(tq -> tq.getQuestion().getId())
-                .collect(Collectors.toList());
-
-        Map<Long, Double> rawPoints = new HashMap<>();
+        // Dedup theo questionId — tránh bag Hibernate / JOIN làm phình response
+        LinkedHashMap<Long, Double> rawPoints = new LinkedHashMap<>();
+        List<Long> questionIds = new ArrayList<>();
         for (ExamTemplateQuestion tq : ordered) {
-            rawPoints.put(tq.getQuestion().getId(), tq.getRawPoint());
+            Long qid = tq.getQuestion().getId();
+            if (rawPoints.containsKey(qid)) {
+                continue;
+            }
+            questionIds.add(qid);
+            rawPoints.put(qid, tq.getRawPoint());
         }
+
+        boolean isOmr = Boolean.TRUE.equals(template.getIsOmr());
+        Integer maxOptions = template.getMaxOptions() != null
+                ? template.getMaxOptions()
+                : (isOmr ? 4 : 6);
 
         return ExamTemplateResponse.builder()
                 .id(template.getId())
@@ -481,6 +515,8 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
                 .rawPoints(rawPoints)
                 .createdAt(template.getCreatedAt())
                 .isActive(template.getIsActive())
+                .isOmr(isOmr)
+                .maxOptions(maxOptions)
                 .build();
     }
 
@@ -524,5 +560,93 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
             response.setSourceTemplateId(exam.getSourceTemplate().getId());
         }
         return response;
+    }
+
+    @Override
+    @Transactional
+    public ExamTemplateResponse generateRandomTemplate(TemplateGenerationRequest request) {
+        String email = getCurrentUserEmail();
+        
+        // Validate teacher
+        User teacher = userRepository.findByEmail(email)
+            .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin giảng viên"));
+        
+        // Validate subject
+        Subject subject = subjectRepository.findById(request.getSubjectId())
+            .orElseThrow(() -> new RuntimeException("Không tìm thấy môn học với ID: " + request.getSubjectId()));
+        
+        // Validate topic if provided
+        if (request.getTopicId() != null) {
+            topicRepository.findById(request.getTopicId())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy chủ đề với ID: " + request.getTopicId()));
+        }
+        
+        // 1. Lấy danh sách câu hỏi phù hợp (DISTINCT — tránh JOIN FETCH làm nhân bản theo options)
+        List<Question> rawCandidates;
+        if (Boolean.TRUE.equals(request.getIsOmr())) {
+            rawCandidates = questionRepository.findOmrCompatibleQuestions(
+                request.getSubjectId(),
+                request.getTopicId()
+            );
+        } else {
+            rawCandidates = questionRepository.findAllActiveBySubjectAndTopic(
+                request.getSubjectId(),
+                request.getTopicId()
+            );
+        }
+
+        // 2. Dedup theo id (phòng Hibernate vẫn trả trùng)
+        Map<Long, Question> uniqueById = new LinkedHashMap<>();
+        for (Question q : rawCandidates) {
+            uniqueById.putIfAbsent(q.getId(), q);
+        }
+        List<Question> candidateQuestions = new ArrayList<>(uniqueById.values());
+
+        // 3. Validate đủ câu không
+        if (candidateQuestions.size() < request.getTotalQuestions()) {
+            throw new RuntimeException(
+                "Không đủ câu hỏi" +
+                (Boolean.TRUE.equals(request.getIsOmr()) ? " tương thích OMR" : "") +
+                ". Cần: " + request.getTotalQuestions() +
+                ", Có sẵn: " + candidateQuestions.size()
+            );
+        }
+
+        // 4. Random và chọn câu hỏi (không trùng)
+        Collections.shuffle(candidateQuestions);
+        List<Question> selectedQuestions = new ArrayList<>(
+            candidateQuestions.subList(0, request.getTotalQuestions())
+        );
+
+        // 5. Tạo template
+        boolean isOmr = Boolean.TRUE.equals(request.getIsOmr());
+        ExamTemplate template = ExamTemplate.builder()
+            .title(request.getTitle())
+            .subject(subject)
+            .teacher(teacher)
+            .isOmr(isOmr)
+            .totalQuestions(selectedQuestions.size())
+            .maxOptions(isOmr ? 4 : 6)
+            .isActive(true)
+            .build();
+
+        template = examTemplateRepository.save(template);
+
+        // 6. Thêm câu hỏi vào template
+        double pointsPerQuestion = request.getPointsPerQuestion() != null ?
+            request.getPointsPerQuestion() : 1.0;
+
+        for (int i = 0; i < selectedQuestions.size(); i++) {
+            template.addQuestion(
+                selectedQuestions.get(i),
+                i + 1,
+                pointsPerQuestion
+            );
+        }
+
+        template = examTemplateRepository.save(template);
+
+        // 7. Convert to response (có isOmr + maxOptions)
+        return toResponse(template);
     }
 }

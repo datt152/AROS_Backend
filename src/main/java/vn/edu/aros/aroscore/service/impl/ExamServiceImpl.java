@@ -425,10 +425,13 @@ public class ExamServiceImpl implements ExamService {
                 List<AnswerMapping> answerMappings = new ArrayList<>();
                 for (int i = 0; i < options.size(); i++) {
                     AnswerOption opt = options.get(i);
-                    answerMappings.add(new AnswerMapping(opt.getId(), LABELS[i], opt.getIsCorrect()));
+                    answerMappings.add(new AnswerMapping(
+                            opt.getId(), LABELS[i], opt.getIsCorrect(), opt.getContent()));
                 }
 
-                matrixList.add(new QuestionMatrix(q.getId(), newQuestionOrder, answerMappings));
+                // Snapshot stem + options vào matrix để đề không phụ thuộc bank sau khi sửa
+                matrixList.add(new QuestionMatrix(
+                        q.getId(), newQuestionOrder, q.getContent(), q.getType(), answerMappings));
                 newQuestionOrder++;
             }
 
@@ -473,22 +476,17 @@ public class ExamServiceImpl implements ExamService {
             Question originalQ = originalEq.getQuestion();
             List<OptionInVersionResponse> optionResponses = new ArrayList<>();
             for (AnswerMapping aMap : qMatrix.getAnswerMappings()) {
-                AnswerOption originalOpt = originalQ.getOptions().stream()
-                        .filter(opt -> opt.getId().equals(aMap.getOriginalOptionId()))
-                        .findFirst()
-                        .orElseThrow();
-
                 OptionInVersionResponse optRes = new OptionInVersionResponse();
                 optRes.setLabel(aMap.getNewLabel());
-                optRes.setContent(originalOpt.getContent());
+                optRes.setContent(resolveOptionContent(aMap, originalQ));
                 optionResponses.add(optRes);
             }
             optionResponses.sort(Comparator.comparing(OptionInVersionResponse::getLabel));
 
             QuestionInVersionResponse qRes = new QuestionInVersionResponse();
             qRes.setOriginalQuestionId(originalQ.getId());
-            qRes.setContent(originalQ.getContent());
-            qRes.setType(originalQ.getType());
+            qRes.setContent(resolveQuestionContent(qMatrix, originalQ));
+            qRes.setType(resolveQuestionType(qMatrix, originalQ));
             qRes.setOptions(optionResponses);
             questionResponses.add(qRes);
         }
@@ -723,6 +721,38 @@ public class ExamServiceImpl implements ExamService {
             return false;
         }
         return LocalDateTime.now().isAfter(startTime.plusMinutes(durationMinutes));
+    }
+
+    /** Ưu tiên nội dung snapshot trong matrix; mã đề cũ (chưa snapshot) fallback bank. */
+    private static String resolveQuestionContent(QuestionMatrix matrix, Question question) {
+        if (matrix != null && matrix.getContent() != null) {
+            return matrix.getContent();
+        }
+        return question != null ? question.getContent() : null;
+    }
+
+    private static QuestionType resolveQuestionType(QuestionMatrix matrix, Question question) {
+        if (matrix != null && matrix.getType() != null) {
+            return matrix.getType();
+        }
+        return question != null ? question.getType() : null;
+    }
+
+    private static String resolveOptionContent(AnswerMapping mapping, Question question) {
+        if (mapping == null) {
+            return "";
+        }
+        if (mapping.getContent() != null) {
+            return mapping.getContent();
+        }
+        if (question == null || question.getOptions() == null) {
+            return "";
+        }
+        return question.getOptions().stream()
+                .filter(opt -> opt.getId().equals(mapping.getOriginalOptionId()))
+                .map(AnswerOption::getContent)
+                .findFirst()
+                .orElse("");
     }
 
     private boolean isPastSubmitGrace(LocalDateTime startTime, Integer durationMinutes) {
@@ -1232,24 +1262,17 @@ public class ExamServiceImpl implements ExamService {
                     .orElseThrow(() -> new RuntimeException("Lỗi đồng bộ dữ liệu câu hỏi"));
 
             List<OptionTakeResponse> optionDTOs = qm.getAnswerMappings().stream()
-                    .map(mapping -> {
-                        String answerContent = originalQ.getOptions().stream()
-                                .filter(a -> a.getId().equals(mapping.getOriginalOptionId()))
-                                .findFirst()
-                                .map(AnswerOption::getContent)
-                                .orElse("");
-                        return OptionTakeResponse.builder()
-                                .label(mapping.getNewLabel())
-                                .content(answerContent)
-                                .build();
-                    })
+                    .map(mapping -> OptionTakeResponse.builder()
+                            .label(mapping.getNewLabel())
+                            .content(resolveOptionContent(mapping, originalQ))
+                            .build())
                     .collect(Collectors.toList());
             optionDTOs.sort(Comparator.comparing(OptionTakeResponse::getLabel));
 
             questionDTOs.add(QuestionTakeResponse.builder()
                     .questionId(originalQ.getId())
-                    .content(originalQ.getContent())
-                    .type(originalQ.getType())
+                    .content(resolveQuestionContent(qm, originalQ))
+                    .type(resolveQuestionType(qm, originalQ))
                     .options(optionDTOs)
                     .build());
         }
