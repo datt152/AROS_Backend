@@ -11,6 +11,9 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "app.mail")
 public class AppMailProperties {
 
+    /** smtp hoặc resend */
+    private String provider = "smtp";
+
     /** Địa chỉ From (thường trùng SPRING_MAIL_USERNAME) */
     private String from = "";
 
@@ -18,4 +21,7 @@ public class AppMailProperties {
 
     /** URL frontend để gắn link đăng nhập trong email */
     private String frontendUrl = "http://localhost:5173";
+
+    /** API key của Resend (chỉ cần khi provider=resend) */
+    private String resendApiKey = "";
 }
