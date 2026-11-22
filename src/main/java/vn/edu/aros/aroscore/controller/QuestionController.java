@@ -6,9 +6,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import vn.edu.aros.aroscore.dto.request.QuestionRequest;
+import vn.edu.aros.aroscore.dto.response.QuestionImportResult;
 import vn.edu.aros.aroscore.dto.response.QuestionResponse;
+import vn.edu.aros.aroscore.entity.User;
+import vn.edu.aros.aroscore.repository.UserRepository;
+import vn.edu.aros.aroscore.service.QuestionImportService;
 import vn.edu.aros.aroscore.service.QuestionService;
 
 @RestController
@@ -17,6 +23,12 @@ public class QuestionController {
 
     @Autowired
     private QuestionService questionService;
+
+    @Autowired
+    private QuestionImportService questionImportService;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @PostMapping
     @PreAuthorize("hasRole('TEACHER')")
@@ -46,5 +58,28 @@ public class QuestionController {
     public ResponseEntity<String> softDeleteQuestion(@PathVariable Long id) {
         questionService.softDeleteQuestion(id);
         return ResponseEntity.ok("Đã xóa câu hỏi khỏi ngân hàng!");
+    }
+
+    /**
+     * Import hàng loạt câu hỏi từ file Excel vào một Topic cụ thể
+     */
+    @PostMapping("/import")
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<QuestionImportResult> importQuestions(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("topicId") Long topicId) {
+        
+        // Lấy teacher ID từ security context
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User teacher = userRepository.findByEmail(email)
+            .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin giảng viên"));
+        
+        QuestionImportResult result = questionImportService.importQuestionsFromExcel(
+            file,
+            topicId,
+            teacher.getId()
+        );
+        
+        return ResponseEntity.ok(result);
     }
 }

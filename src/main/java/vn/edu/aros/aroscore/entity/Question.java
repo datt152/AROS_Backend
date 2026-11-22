@@ -63,4 +63,31 @@ public class Question {
         options.add(option);
         option.setQuestion(this);
     }
+
+    /**
+     * Kiểm tra câu hỏi có tương thích với đề thi OMR không.
+     * Điều kiện: Loại SINGLE_CHOICE và tối đa 4 đáp án.
+     */
+    public boolean isOmrCompatible() {
+        return this.type == QuestionType.SINGLE_CHOICE 
+            && this.options != null 
+            && this.options.size() <= 4;
+    }
+
+    /**
+     * Đếm số đáp án đúng trong câu hỏi
+     */
+    public long getCorrectAnswerCount() {
+        if (this.options == null) return 0;
+        return this.options.stream()
+            .filter(opt -> Boolean.TRUE.equals(opt.getIsCorrect()))
+            .count();
+    }
+
+    /**
+     * Lấy tổng số đáp án (options) của câu hỏi
+     */
+    public int getTotalOptions() {
+        return this.options != null ? this.options.size() : 0;
+    }
 }

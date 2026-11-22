@@ -49,16 +49,43 @@ public class QuestionServiceImpl implements QuestionService {
         Topic topic = resolveTopic(request.getTopicId(), subject, email);
 
         // ==== VALIDATE LOGIC LOẠI CÂU HỎI ====
+        int totalOptions = request.getOptions() != null ? request.getOptions().size() : 0;
         long correctCount = request.getOptions().stream()
                 .filter(AnswerOptionRequest::getIsCorrect)
                 .count();
 
-        if (request.getType() == QuestionType.SINGLE_CHOICE && correctCount != 1) {
-            throw new RuntimeException("Câu hỏi chọn 1 đáp án bắt buộc phải có CHÍNH XÁC 1 đáp án đúng!");
+        // 1. Validate số lượng đáp án
+        if (totalOptions < 2) {
+            throw new RuntimeException("Câu hỏi phải có ít nhất 2 đáp án!");
+        }
+        if (totalOptions > 6) {
+            throw new RuntimeException("Câu hỏi chỉ được phép tối đa 6 đáp án (A-F)!");
         }
 
-        if (request.getType() == QuestionType.MULTIPLE_CHOICE && correctCount < 2) {
-            throw new RuntimeException("Câu hỏi chọn nhiều đáp án phải có ít nhất 2 đáp án đúng!");
+        // 2. Validate SINGLE_CHOICE
+        if (request.getType() == QuestionType.SINGLE_CHOICE) {
+            if (correctCount != 1) {
+                throw new RuntimeException(
+                    "Câu hỏi SINGLE_CHOICE bắt buộc phải có CHÍNH XÁC 1 đáp án đúng! " +
+                    "(Hiện có: " + correctCount + ")"
+                );
+            }
+        }
+
+        // 3. Validate MULTIPLE_CHOICE
+        if (request.getType() == QuestionType.MULTIPLE_CHOICE) {
+            if (correctCount < 2) {
+                throw new RuntimeException(
+                    "Câu hỏi MULTIPLE_CHOICE phải có ít nhất 2 đáp án đúng!"
+                );
+            }
+            // ⚠️ QUY TẮC MỚI: Không được TẤT CẢ đều đúng
+            if (correctCount >= totalOptions) {
+                throw new RuntimeException(
+                    "Câu hỏi MULTIPLE_CHOICE không được có TẤT CẢ đáp án đều đúng! " +
+                    "Số đáp án đúng (" + correctCount + ") phải nhỏ hơn tổng số đáp án (" + totalOptions + ")"
+                );
+            }
         }
         // =====================================
 
@@ -120,15 +147,38 @@ public class QuestionServiceImpl implements QuestionService {
         question.setTopic(resolveTopic(request.getTopicId(), subject, email));
 
         // 3. Validate logic loại câu hỏi
+        int totalOptions = request.getOptions() != null ? request.getOptions().size() : 0;
         long correctCount = request.getOptions().stream()
                 .filter(AnswerOptionRequest::getIsCorrect)
                 .count();
 
-        if (request.getType() == QuestionType.SINGLE_CHOICE && correctCount != 1) {
-            throw new RuntimeException("Câu hỏi chọn 1 đáp án bắt buộc phải có CHÍNH XÁC 1 đáp án đúng!");
+        // Validate số lượng đáp án
+        if (totalOptions < 2) {
+            throw new RuntimeException("Câu hỏi phải có ít nhất 2 đáp án!");
         }
-        if (request.getType() == QuestionType.MULTIPLE_CHOICE && correctCount < 2) {
-            throw new RuntimeException("Câu hỏi chọn nhiều đáp án phải có ít nhất 2 đáp án đúng!");
+        if (totalOptions > 6) {
+            throw new RuntimeException("Câu hỏi chỉ được phép tối đa 6 đáp án (A-F)!");
+        }
+
+        // Validate SINGLE_CHOICE
+        if (request.getType() == QuestionType.SINGLE_CHOICE && correctCount != 1) {
+            throw new RuntimeException(
+                "Câu hỏi SINGLE_CHOICE bắt buộc phải có CHÍNH XÁC 1 đáp án đúng! " +
+                "(Hiện có: " + correctCount + ")"
+            );
+        }
+
+        // Validate MULTIPLE_CHOICE
+        if (request.getType() == QuestionType.MULTIPLE_CHOICE) {
+            if (correctCount < 2) {
+                throw new RuntimeException("Câu hỏi MULTIPLE_CHOICE phải có ít nhất 2 đáp án đúng!");
+            }
+            if (correctCount >= totalOptions) {
+                throw new RuntimeException(
+                    "Câu hỏi MULTIPLE_CHOICE không được có TẤT CẢ đáp án đều đúng! " +
+                    "Số đáp án đúng (" + correctCount + ") phải nhỏ hơn tổng số đáp án (" + totalOptions + ")"
+                );
+            }
         }
 
         // 4. Cập nhật thông tin cơ bản
