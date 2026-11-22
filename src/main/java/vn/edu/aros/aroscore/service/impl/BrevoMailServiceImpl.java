@@ -16,21 +16,21 @@ import java.util.Map;
 
 @Slf4j
 @Service
-@ConditionalOnProperty(name = "app.mail.provider", havingValue = "resend")
-public class ResendMailServiceImpl implements MailService {
+@ConditionalOnProperty(name = "app.mail.provider", havingValue = "brevo")
+public class BrevoMailServiceImpl implements MailService {
 
-    private static final String RESEND_API_URL = "https://api.resend.com/emails";
+    private static final String BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 
-    private final RestClient resendClient;
+    private final RestClient brevoClient;
     private final TemplateEngine templateEngine;
     private final AppMailProperties mailProperties;
 
-    public ResendMailServiceImpl(AppMailProperties mailProperties, TemplateEngine templateEngine) {
+    public BrevoMailServiceImpl(AppMailProperties mailProperties, TemplateEngine templateEngine) {
         this.mailProperties = mailProperties;
         this.templateEngine = templateEngine;
-        this.resendClient = RestClient.builder()
-                .baseUrl(RESEND_API_URL)
-                .defaultHeader("Authorization", "Bearer " + mailProperties.getResendApiKey())
+        this.brevoClient = RestClient.builder()
+                .baseUrl(BREVO_API_URL)
+                .defaultHeader("api-key", mailProperties.getBrevoApiKey())
                 .defaultHeader("Content-Type", "application/json")
                 .build();
     }
@@ -53,10 +53,10 @@ public class ResendMailServiceImpl implements MailService {
             String html = templateEngine.process("mail/student-account-created", context);
             String subject = "[" + mailProperties.getFromName() + "] Tài khoản sinh viên đã được tạo";
 
-            sendViaResend(toEmail, subject, html);
-            log.info("Đã gửi mail tạo tài khoản tới {} qua Resend", toEmail);
+            sendViaBrevo(toEmail, subject, html);
+            log.info("Đã gửi mail tạo tài khoản tới {} qua Brevo", toEmail);
         } catch (Exception e) {
-            log.error("Gửi mail tới {} qua Resend thất bại: {}", toEmail, e.getMessage());
+            log.error("Gửi mail tới {} qua Brevo thất bại: {}", toEmail, e.getMessage());
         }
     }
 
@@ -78,24 +78,27 @@ public class ResendMailServiceImpl implements MailService {
             String html = templateEngine.process("mail/password-reset", context);
             String subject = "[" + mailProperties.getFromName() + "] Đặt lại mật khẩu";
 
-            sendViaResend(toEmail, subject, html);
-            log.info("Đã gửi mail đặt lại mật khẩu tới {} qua Resend", toEmail);
+            sendViaBrevo(toEmail, subject, html);
+            log.info("Đã gửi mail đặt lại mật khẩu tới {} qua Brevo", toEmail);
         } catch (Exception e) {
-            log.error("Gửi mail đặt lại mật khẩu tới {} qua Resend thất bại: {}", toEmail, e.getMessage());
+            log.error("Gửi mail đặt lại mật khẩu tới {} qua Brevo thất bại: {}", toEmail, e.getMessage());
         }
     }
 
-    private void sendViaResend(String to, String subject, String htmlBody) {
-        String fromAddress = mailProperties.getFromName() + " <" + mailProperties.getFrom() + ">";
-
-        Map<String, Object> body = Map.of(
-                "from", fromAddress,
-                "to", List.of(to),
-                "subject", subject,
-                "html", htmlBody
+    private void sendViaBrevo(String to, String subject, String htmlBody) {
+        Map<String, Object> sender = Map.of(
+                "name", mailProperties.getFromName(),
+                "email", mailProperties.getFrom()
         );
 
-        resendClient.post()
+        Map<String, Object> body = Map.of(
+                "sender", sender,
+                "to", List.of(Map.of("email", to)),
+                "subject", subject,
+                "htmlContent", htmlBody
+        );
+
+        brevoClient.post()
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(body)
                 .retrieve()

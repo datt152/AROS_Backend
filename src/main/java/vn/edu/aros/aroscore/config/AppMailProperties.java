@@ -22,6 +22,6 @@ public class AppMailProperties {
     /** URL frontend để gắn link đăng nhập trong email */
     private String frontendUrl = "http://localhost:5173";
 
-    /** API key của Resend (chỉ cần khi provider=resend) */
-    private String resendApiKey = "";
+    /** API key của Brevo (chỉ cần khi provider=brevo) */
+    private String brevoApiKey = "";
 }
